@@ -13,6 +13,9 @@ from copy import deepcopy as copy
 from ...modules import mmi
 from ...modules import phase
 
+class PhaseList(np.ndarray):
+    ...
+
 class SuperKN:
     """Kernel nuller representation for 4 telescopes.
 
