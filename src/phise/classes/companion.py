@@ -1,18 +1,3 @@
-"""Representation of a point-like companion on the sky.
-
-This module defines the `Companion` class that models an unresolved source
-orbiting a host star. A companion is characterized by its contrast relative
-to the star, its angular separation, and its parallactic angle.
-
-Unit validations use ``astropy.units``. Properties are read/write for the
-physical parameters, while the relation to the parent `Target` is read-only.
-
-Example
-    >>> from phise.classes.companion import Companion
-    >>> import astropy.units as u
-    >>> comp = Companion(c=1e-3, θ=100*u.mas, α=0.1*u.rad, name='b')
-    >>> print(comp)
-"""
 from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
@@ -22,34 +7,23 @@ from astropy import units as u
 class Companion:
     """Point-like astronomical companion.
 
-    Main parameters:
-    - c: Contrast (positive float) relative to the host star.
-    - θ: Angular separation (``astropy.units.Quantity``, e.g., milliarcseconds).
-    - α: Parallactic angle (``astropy.units.Quantity``, e.g., radians).
-    - name: Readable name (str).
+    Args:
+        c (float): Contrast relative to the host star (must be >= 0).
+        ρ (u.Quantity): Angular separation (e.g., ``100 * u.mas``).
+        θ (u.Quantity): Parallactic angle (e.g., ``0.1 * u.rad``).
+        name (str, optional): Readable companion name.
 
-    The class validates units for ``θ`` and ``α`` and stores them internally as
-    milliarcseconds and radians, respectively, for consistency.
+    Raises:
+        TypeError: If provided types are not as expected.
+        ValueError: If invalid physical values are supplied (e.g., negative contrast).
     """
 
-    __slots__ = ('_parent_target', '_c', '_θ', '_α', '_name')
+    __slots__ = ('_parent_target', '_c', '_ρ', '_ρ_unit', '_θ', '_θ_unit', '_name')
 
-    def __init__(self, c: float, θ: u.Quantity, α: u.Quantity, name: str = 'Unnamed Companion'):
-        """Initialize a point-like companion.
-
-        Args:
-            c (float): Contrast relative to the host star (must be >= 0).
-            θ (u.Quantity): Angular separation (e.g., ``100 * u.mas``).
-            α (u.Quantity): Parallactic angle (e.g., ``0.1 * u.rad``).
-            name (str, optional): Readable companion name.
-
-        Raises:
-            TypeError: If provided types are not as expected.
-            ValueError: If invalid physical values are supplied (e.g., negative contrast).
-        """
+    def __init__(self, c: float, ρ: u.Quantity, θ: u.Quantity, name: str = 'Unnamed Companion'):
         self._parent_target = None
+        self.ρ = ρ
         self.θ = θ
-        self.α = α
         self.c = c
         self.name = name
 
@@ -59,8 +33,8 @@ class Companion:
     def __str__(self) -> str:
         res = f'Companion "{self.name}"\n'
         res += f'  Contrast: {self.c:.2f}\n'
-        res += f'  Angular separation: {self.θ:.2f}\n'
-        res += f'  Parallactic angle: {self.α:.2f}'
+        res += f'  Angular separation: {self.ρ:.2f}\n'
+        res += f'  Parallactic angle: {self.θ:.2f}'
         return res
 
     @property
@@ -86,52 +60,54 @@ class Companion:
         self._c = float(c)
 
     @property
-    def θ(self) -> u.Quantity:
+    def ρ(self) -> u.Quantity:
         """Angular separation (u.Quantity in mas).
 
         Returns:
             u.Quantity: Separation in milliarcseconds (mas).
         """
-        return self._θ
+        return (self._ρ * u.mas).to(self._ρ_unit)
 
-    @θ.setter
-    def θ(self, θ: u.Quantity):
+    @ρ.setter
+    def ρ(self, ρ: u.Quantity):
         """Set the angular separation.
 
         Args:
-            θ (u.Quantity): Angle quantity (e.g., ``100 * u.mas`` or ``0.1 * u.arcsec``).
+            ρ (u.Quantity): Angle quantity (e.g., ``100 * u.mas`` or ``0.1 * u.arcsec``).
         """
-        if not isinstance(θ, u.Quantity):
-            raise TypeError('θ must be an astropy Quantity')
+        if not isinstance(ρ, u.Quantity):
+            raise TypeError('ρ must be an astropy Quantity')
         try:
-            θ = θ.to(u.mas)
+            new_ρ = ρ.to(u.mas).value
         except u.UnitConversionError:
-            raise ValueError('θ must be an angle')
-        self._θ = θ
+            raise ValueError('ρ must be an angle')
+        self._ρ_unit = ρ.unit
+        self._ρ = new_ρ
 
     @property
-    def α(self) -> u.Quantity:
+    def θ(self) -> u.Quantity:
         """Parallactic angle (u.Quantity in radians).
 
         Returns:
             u.Quantity: Angle in radians.
         """
-        return self._α
+        return (self._θ * u.rad).to(self._θ_unit)
 
-    @α.setter
-    def α(self, α: u.Quantity):
+    @θ.setter
+    def θ(self, θ: u.Quantity):
         """Set the parallactic angle.
 
         Args:
-            α (u.Quantity): Angle quantity (e.g., ``0.1 * u.rad`` or ``10 * u.deg``).
+            θ (u.Quantity): Angle quantity (e.g., ``0.1 * u.rad`` or ``10 * u.deg``).
         """
-        if not isinstance(α, u.Quantity):
-            raise TypeError('α must be an astropy Quantity')
+        if not isinstance(θ, u.Quantity):
+            raise TypeError('θ must be an astropy Quantity')
         try:
-            α = α.to(u.rad)
+            new_θ = θ.to(u.rad).value
         except u.UnitConversionError:
-            raise ValueError('α must be an angle')
-        self._α = α
+            raise ValueError('θ must be an angle')
+        self._θ_unit = θ.unit
+        self._θ = new_θ
 
     @property
     def parent_target(self) -> Target:
