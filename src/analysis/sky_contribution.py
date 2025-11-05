@@ -29,7 +29,7 @@ def plot(ctx: Context=None, resolution: int=100, n=100, map=np.median):
     """
     if ctx is None:
         ref_ctx = Context.get_VLTI()
-        ref_ctx.interferometer.kn.σ = np.zeros(14) * u.nm
+        ref_ctx.interferometer.chip.σ = np.zeros(14) * u.nm
     else:
         ref_ctx = copy(ctx)
     images = np.zeros((3, resolution, resolution))

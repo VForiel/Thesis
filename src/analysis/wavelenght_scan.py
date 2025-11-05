@@ -30,7 +30,7 @@ Returns
         n += 1
     if ctx is None:
         ctx = Context.get_VLTI()
-        ctx.interferometer.kn.σ = np.zeros(14) * u.m
+        ctx.interferometer.chip.σ = np.zeros(14) * u.m
         ctx.Γ = 0 * u.nm
         ctx.target.companions = []
         ctx.monochromatic = True

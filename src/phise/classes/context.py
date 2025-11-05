@@ -23,8 +23,7 @@ from scipy.optimize import curve_fit
 from .interferometer import Interferometer
 from .target import Target
 from .companion import Companion
-from .chip import superkn
-from .chip import SuperKN
+from .archs import superkn, SuperKN
 
 from ..modules import coordinates
 from ..modules import signals
@@ -44,7 +43,7 @@ class Context:
         name (str): Human-readable context name.
     """
 
-    __slots__ = ('_initialized', '_interferometer', '_target', '_h', '_Δh', '_Γ', '_name', '_p', '_ph', '_monochromatic')
+    __slots__ = ('_initialized', '_interferometer', '_target', '_h', '_h_unit', '_Δh', '_Δh_unit', '_Γ', '_Γ_unit', '_name', '_p', '_ph', '_monochromatic')
 
     def __init__(
             self,
@@ -69,8 +68,8 @@ class Context:
         self.monochromatic = monochromatic
         self.name = name
         
-        self.project_telescopes_position() # define self.p
-        self.update_photon_flux() # define self.pf
+        self._update_p() # define self.p
+        self._update_pf() # define self.pf
 
         self._initialized = True
 
@@ -104,7 +103,7 @@ class Context:
         self._interferometer = copy(interferometer)
         self.interferometer._parent_ctx = self
         if self._initialized:
-            self.project_telescopes_position()
+            self._update_p()
 
     # Target property ---------------------------------------------------------
     
@@ -122,7 +121,7 @@ class Context:
         self._target = copy(target)
         self.target._parent_ctx = self
         if self._initialized:
-            self.project_telescopes_position()
+            self._update_p()
 
     # h property --------------------------------------------------------------
 
@@ -131,19 +130,20 @@ class Context:
         """
         Local hour angle (central time) of the observation.
         """
-        return self._h
+        return (self._h * u.hourangle).to(self._h_unit)
     
     @h.setter
     def h(self, h: u.Quantity):
         if type(h) != u.Quantity:
             raise TypeError("h must be a Quantity")
         try:
-            h = h.to(u.hourangle)
+            new_h = h.to(u.hourangle).value
         except u.UnitConversionError:
             raise ValueError("h must be in a hourangle unit")
-        self._h = h
+        self._h_unit = h.unit
+        self._h = new_h
         if self._initialized:
-            self.project_telescopes_position()
+            self._update_p()
 
     # Δh property -------------------------------------------------------------
 
@@ -152,19 +152,20 @@ class Context:
         """
         Time/Hour-angle span of the observation.
         """
-        return self._Δh
+        return (self._Δh * u.hourangle).to(self._Δh_unit)
     
     @Δh.setter
     def Δh(self, Δh: u.Quantity):
         if type(Δh) != u.Quantity:
             raise TypeError("Δh must be a Quantity")
         try:
-            Δh = Δh.to(u.hourangle)
+            new_Δh = Δh.to(u.hourangle).value
         except u.UnitConversionError:
             raise ValueError("Δh must be in a hourangle unit")
-        if Δh < (e := self.interferometer.camera.e.to(u.hour).value * u.hourangle):
-            Δh = e
-        self._Δh = Δh
+        if new_Δh < (e := self.interferometer.camera.e.to(u.hour).value):
+            raise ValueError(f"Δh must be upper or equal to the exposure time {e}")
+        self._Δh = new_Δh
+        self._Δh_unit = Δh.unit
 
     # Γ property --------------------------------------------------------------
 
@@ -173,17 +174,18 @@ class Context:
         """
         RMS cophasing error (in length units) of the observation.
         """
-        return self._Γ
+        return (self._Γ * u.m).to(self._Γ_unit)
     
     @Γ.setter
     def Γ(self, Γ: u.Quantity):
         if type(Γ) != u.Quantity:
             raise TypeError("Γ must be a Quantity")
         try:
-            Γ = Γ.to(u.m)
+            new_Γ = Γ.to(u.m).value
         except u.UnitConversionError:
             raise ValueError("Γ must be in a distance unit")
-        self._Γ = Γ
+        self._Γ = new_Γ
+        self._Γ_unit = Γ.unit
 
     # p property --------------------------------------------------------------
     
@@ -192,26 +194,19 @@ class Context:
         """
         (Read-only) Projected telescope positions in a plane perpendicular to the line of sight.
         """
-        return self._p
+        return self._p * u.m
         
     @p.setter
-    def p(self, p: u.Quantity):
-        raise ValueError("p is a read-only property. Use project_telescopes_position() to set it accordingly to the other parameters in this context.")
+    def p(self, _):
+        raise ValueError("p is a read-only property. Use _update_p() to set it accordingly to the other parameters in this context.")
     
-    def project_telescopes_position(self):
-        """
-        Project telescope positions into the plane perpendicular to the LOS.
-
-        Sets the ``p`` property (projected positions in meters) from local
-        telescope positions and the hour angle ``h``.
-        """
+    def _update_p(self):
         h = self.h.to(u.rad).value
         l = self.interferometer.l.to(u.rad).value
         δ = self.target.δ.to(u.rad).value
         r = np.array([i.r.to(u.m).value for i in self.interferometer.telescopes])
         
-        self._p = project_position_jit(r, h, l, δ) * u.m
-        return self._p
+        self._p = project_position_jit(r, h, l, δ)
     
     # monochromatic property --------------------------------------------------
 
@@ -251,26 +246,14 @@ class Context:
         (Read-only) Photon flux per telescope. Shape: (n_telescopes,)
         """
         if not hasattr(self, "_ph"):
-            raise AttributeError("pf is not defined. Call update_photon_flux() first.")
+            raise AttributeError("pf is not defined.")
         return self._ph
     
     @pf.setter
     def pf(self, pf: u.Quantity):
-        """Set photon flux in the context (read-only property).
+        raise ValueError("pf is a read-only property.")
 
-        Raises:
-            ValueError: Always raised; use ``update_photon_flux()``.
-        """
-        raise ValueError("pf is a read-only property. Use update_photon_flux() to set it accordingly to the other parameters in this context.")
-
-    def update_photon_flux(self):
-        """Compute and store the photon flux received by each telescope.
-
-        Notes:
-            - The target spectral flux is assumed constant over the band Δλ.
-            - If Δλ == 0 (monochromatic case), the value is normalized by 1 nm.
-        """
-
+    def _update_pf(self):
         f = self.target.f.to(u.W / u.m**2 / u.nm)
         λ = self.interferometer.λ.to(u.m)
         η = self.interferometer.η
@@ -341,100 +324,22 @@ class Context:
             N (int): Map resolution.
 
         Returns:
-            tuple[np.ndarray, np.ndarray, np.ndarray]:
-                - Null outputs map (3 x N x N)
-                - Dark outputs map (6 x N x N)
-                - Kernel outputs map (3 x N x N)
+            - np.ndarray[float]: Raw outputs transmission maps (nb_raw_outputs x N x N)
+            - Optional[np.ndarray[float]]: Processed outputs transmission maps (nb_processed_outputs x N x N)
         """
 
         N=N
-        φ=self.interferometer.kn.φ.to(u.m).value
-        σ=self.interferometer.kn.σ.to(u.m).value
+        φ=self.interferometer.chip.φ.to(u.m).value
+        σ=self.interferometer.chip.σ.to(u.m).value
         p=self.p.value
         λ=self.interferometer.λ.to(u.m).value
-        λ0=self.interferometer.kn.λ0.to(u.m).value
+        λ0=self.interferometer.chip.λ0.to(u.m).value
         fov=self.interferometer.fov
-        output_order=self.interferometer.kn.output_order
+        output_order=self.interferometer.chip.output_order
+        nb_raw_outputs = self.interferometer.chip.nb_raw_outputs
+        nb_processed_outputs = self.interferometer.chip.nb_processed_outputs
 
-        return get_transmission_map_jit(N=N, φ=φ, σ=σ, p=p, λ=λ, λ0=λ0, fov=fov, output_order=output_order)
-
-    def plot_transmission_maps(self, N:int, return_plot:bool = False) -> None:
-        
-        # Get transmission maps
-        n_maps, d_maps, k_maps = self.get_transmission_maps(N=N)
-
-        # Get companions position to plot them
-        companions_pos = []
-        for c in self.target.companions:
-            x, y = coordinates.ρθ_to_xy(ρ=c.ρ, θ=c.θ, fov=self.interferometer.fov)
-            companions_pos.append((x*self.interferometer.fov/2, y*self.interferometer.fov/2))
-
-        _, axs = plt.subplots(2, 6, figsize=(35, 10))
-
-        fov = self.interferometer.fov
-        extent = (-fov.value/2, fov.value/2, -fov.value/2, fov.value/2)
-
-        for i in range(3):
-            im = axs[0, i].imshow(n_maps[i], aspect="equal", cmap="hot", extent=extent)
-            axs[0, i].set_title(f"Nuller output {i+1}")
-            plt.colorbar(im, ax=axs[0, i])
-
-        for i in range(6):
-            im = axs[1, i].imshow(d_maps[i], aspect="equal", cmap="hot", extent=extent)
-            axs[1, i].set_title(f"Dark output {i+1}")
-            axs[1, i].set_aspect("equal")
-            plt.colorbar(im, ax=axs[1, i])
-
-        for i in range(3):
-            im = axs[0, i + 3].imshow(k_maps[i], aspect="equal", cmap="bwr", extent=extent)
-            axs[0, i + 3].set_title(f"Kernel {i+1}")
-            plt.colorbar(im, ax=axs[0, i + 3])
-
-        for ax in axs.flatten():
-            ax.set_xlabel(r"$\theta_x$" + f" ({fov.unit})")
-            ax.set_ylabel(r"$\theta_y$" + f" ({fov.unit})")
-            ax.scatter(0, 0, color="yellow", marker="*", edgecolors="black")
-            for x, y in companions_pos:
-                ax.scatter(x, y, color="blue", edgecolors="black")
-
-        # Display companions positions ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-        for ax in axs.flatten():
-            ax.set_xlabel(r"$\theta_x$" + f" ({fov.unit})")
-            ax.set_ylabel(r"$\theta_y$" + f" ({fov.unit})")
-            ax.scatter(0, 0, color="yellow", marker="*", edgecolors="black", s=100)
-            for x, y in companions_pos:
-                ax.scatter(x, y, color="blue", edgecolors="black")
-
-        transmissions = ""
-        companions = [Companion(name=self.target.name + " Star", c=1, θ=0*u.deg, ρ=0*u.mas)] + self.target.companions
-        for i, c in enumerate(companions):
-            θ = c.θ.to(u.rad)
-            ρ = c.ρ.to(u.rad)
-            p = self.p.to(u.m)
-            λ = self.interferometer.λ.to(u.m)
-            ψ = get_unique_source_input_fields_jit(a=1, ρ=ρ.value, θ=θ.value, λ=λ.value, p=p.value)
-
-            n, d, b = self.interferometer.kn.get_output_fields(ψ=ψ, λ=self.interferometer.λ)
-
-            k = np.array([np.abs(d[2*i])**2 - np.abs(d[2*i+1])**2 for i in range(3)])
-
-            linebreak = '<br>' if return_plot else '\n   '
-            transmissions += '<h2>' if return_plot else ''
-            transmissions += f"\n{c.name} throughputs:"
-            transmissions += '</h1>' if return_plot else '\n----------' + linebreak
-            transmissions += f"B: {np.abs(b)**2*100:.2f}%" + linebreak
-            transmissions += f"N: {' | '.join([f'{np.abs(i)**2*100:.2f}%' for i in n])}" + f"   Depth: {np.sum(np.abs(d)**2) / np.abs(b)**2:.2e}" + linebreak
-            transmissions += f"D: {' | '.join([f'{np.abs(i)**2*100:.2f}%' for i in d])}" + f"   Depth: {np.sum(np.abs(d)**2) / np.abs(b)**2:.2e}" + linebreak
-            transmissions += f"K: {' | '.join([f'{i*100:.2f}%' for i in k])}" + f"   Depth: {np.sum(np.abs(k)) / np.abs(b)**2:.2e}" + linebreak
-
-        if return_plot:
-            plot = BytesIO()
-            plt.savefig(plot, format='png')
-            plt.close()
-            return plot.getvalue(), transmissions
-        plt.show()
-        print(transmissions)
+        return get_transmission_map_jit(N=N, φ=φ, σ=σ, p=p, λ=λ, λ0=λ0, fov=fov, output_order=output_order, nb_raw_outputs=nb_raw_outputs, nb_processed_outputs=nb_processed_outputs)
 
     # Get transmission map gradiant norm --------------------------------------
 
@@ -445,85 +350,110 @@ class Context:
             N (int): Map resolution.
 
         Returns:
-            tuple[np.ndarray, np.ndarray, np.ndarray]:
-                - Gradient norm of null outputs (3 x N x N)
-                - Gradient norm of dark outputs (6 x N x N)
-                - Gradient norm of kernels (3 x N x N)
+            - np.ndarray[float]: Raw outputs transmission map gradient norms
+                (nb_raw_outputs x N x N)
+            - Optional[np.ndarray[float]]: Processed outputs transmission map
+                gradient norms (nb_processed_outputs x N x N)
         """
 
-        n_maps, d_maps, k_maps = self.get_transmission_maps(N=N)
+        raw_out_maps, processed_out_maps = self.get_transmission_maps(N=N)
 
-        n_grad = np.empty_like(n_maps)
-        d_grad = np.empty_like(d_maps)
-        k_grad = np.empty_like(k_maps)
+        raw_grad_maps = np.empty_like(raw_out_maps)
+        processed_grad_maps = np.empty_like(processed_out_maps)
 
-        for i in range(3):
-            dnx, dny = np.gradient(n_maps[i])
-            n_grad[i] = np.sqrt(dnx**2 + dny**2)
+        for i in range(self.interferometer.chip.nb_raw_outputs):
+            dnx, dny = np.gradient(raw_out_maps[i])
+            raw_grad_maps[i] = np.sqrt(dnx**2 + dny**2)
 
-            dkx, dky = np.gradient(k_maps[i])
-            k_grad[i] = np.sqrt(dkx**2 + dky**2)
+        for i in range(self.interferometer.chip.nb_processed_outputs):
+            ddx, ddy = np.gradient(processed_out_maps[i])
+            processed_grad_maps[i] = np.sqrt(ddx**2 + ddy**2)
 
-        for i in range(6):
-            ddx, ddy = np.gradient(d_maps[i])
-            d_grad[i] = np.sqrt(ddx**2 + ddy**2)
+        return raw_grad_maps, processed_grad_maps
 
-        return n_grad, d_grad, k_grad
-    
-    # Plot transmission map gradient norm -------------------------------------
+    # Plot transmission maps --------------------------------------------------
 
-    def plot_transmission_map_gradient_norm(self, N:int, return_plot:bool = False) -> None:
-        """Plot the gradient norm of the transmission maps.
+    def plot_transmission_maps(self, N:int, return_plot:bool = False, grad=False) -> None:
+        
+        # Get transmission maps
+        if grad:
+            raw_out_maps, processed_out_maps = self.get_transmission_map_gradient_norm(N=N)
+        else:
+            raw_out_maps, processed_out_maps = self.get_transmission_maps(N=N)
 
-        Args:
-            N (int): Map resolution.
-            return_plot (bool): If ``True``, return the image buffer instead of displaying it.
-
-        Returns:
-            Optional[bytes]: PNG image buffer when ``return_plot=True``; otherwise ``None``.
-        """
-
-        n_grad, d_grad, k_grad = self.get_transmission_map_gradient_norm(N=N)
-
-        _, axs = plt.subplots(2, 6, figsize=(35, 10))
-
-        fov = self.interferometer.fov
-        extent = (-fov.value/2, fov.value/2, -fov.value/2, fov.value/2)
-
+        # Get companions position to plot them
         companions_pos = []
         for c in self.target.companions:
             x, y = coordinates.ρθ_to_xy(ρ=c.ρ, θ=c.θ, fov=self.interferometer.fov)
             companions_pos.append((x*self.interferometer.fov/2, y*self.interferometer.fov/2))
 
-        for i in range(3):
-            im = axs[0, i].imshow(n_grad[i], aspect="equal", cmap="gray", extent=extent)
-            axs[0, i].set_title(f"Nuller output {i+1} gradient norm")
-            plt.colorbar(im, ax=axs[0, i])
+        nb_raw_outs = self.interferometer.chip.nb_raw_outputs
+        nb_processed_outs = self.interferometer.chip.nb_processed_outputs
+        nb_columns = max(nb_raw_outs, nb_processed_outs)
+        _, axs = plt.subplots(2, nb_columns, figsize=(5*nb_columns, 10))
 
-        for i in range(6):
-            im = axs[1, i].imshow(d_grad[i], aspect="equal", cmap="gray", extent=extent)
-            axs[1, i].set_title(f"Dark output {i+1} gradient norm")
-            axs[1, i].set_aspect("equal")
-            plt.colorbar(im, ax=axs[1, i])
+        fov = self.interferometer.fov
+        extent = (-fov.value/2, fov.value/2, -fov.value/2, fov.value/2)
 
-        for i in range(3):
-            im = axs[0, i + 3].imshow(k_grad[i], aspect="equal", cmap="gray", extent=extent)
-            axs[0, i + 3].set_title(f"Kernel {i+1} gradient norm")
-            plt.colorbar(im, ax=axs[0, i + 3])
+        for i in range(nb_columns):
 
-        for ax in axs.flatten():
-            ax.set_xlabel(r"$\theta_x$" + f" ({fov.unit})")
-            ax.set_ylabel(r"$\theta_y$" + f" ({fov.unit})")
-            ax.scatter(0, 0, color="yellow", marker="*", edgecolors="black", s=100)
-            for x, y in companions_pos:
-                ax.scatter(x, y, color="blue", edgecolors="black")
+            if i >= nb_raw_outs:
+                axs[0, i].axis('off')
+                continue
+            else:
+                im = axs[0, i].imshow(raw_out_maps[i], aspect="equal", cmap="hot" if not grad else "gray", extent=extent)
+                axs[0, i].set_title(self.interferometer.chip._raw_output_labels[i])
+                plt.colorbar(im, ax=axs[0, i])
+
+                axs[0, i].set_xlabel(r"$\theta_x$" + f" ({fov.unit})")
+                axs[0, i].set_ylabel(r"$\theta_y$" + f" ({fov.unit})")
+                axs[0, i].scatter(0, 0, color="yellow", marker="*", edgecolors="black", s=100)
+                for x, y in companions_pos:
+                    axs[0, i].scatter(x, y, color="blue", edgecolors="black")
+
+            if i >= nb_processed_outs:
+                axs[1, i].axis('off')
+            else:
+                im = axs[1, i].imshow(processed_out_maps[i], aspect="equal", cmap="bwr" if not grad else "gray", extent=extent)
+                axs[1, i].set_title(self.interferometer.chip._processed_output_labels[i])
+                axs[1, i].set_aspect("equal")
+                plt.colorbar(im, ax=axs[1, i])
+
+                axs[1, i].set_xlabel(r"$\theta_x$" + f" ({fov.unit})")
+                axs[1, i].set_ylabel(r"$\theta_y$" + f" ({fov.unit})")
+                axs[1, i].scatter(0, 0, color="yellow", marker="*", edgecolors="black", s=100)
+                for x, y in companions_pos:
+                    axs[1, i].scatter(x, y, color="blue", edgecolors="black")
+
+        # Display companions positions ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+        transmissions = ""
+        companions = [Companion(name=self.target.name + " Star", c=1, θ=0*u.deg, ρ=0*u.mas)] + self.target.companions
+        for i, c in enumerate(companions):
+            θ = c.θ.to(u.rad)
+            ρ = c.ρ.to(u.rad)
+            p = self.p.to(u.m)
+            λ = self.interferometer.λ.to(u.m)
+            ψ = get_unique_source_input_fields_jit(a=1, ρ=ρ.value, θ=θ.value, λ=λ.value, p=p.value)
+
+            out_fields = self.interferometer.chip.get_output_fields(ψ=ψ, λ=self.interferometer.λ)
+            raw_outs = np.abs(out_fields)**2
+            processed_outs = self.interferometer.chip.process_outputs(raw_outs)
+
+            linebreak = '<br>' if return_plot else '\n   '
+            transmissions += '<h2>' if return_plot else ''
+            transmissions += f"\n{c.name} throughputs:"
+            transmissions += '</h1>' if return_plot else '\n----------' + linebreak
+            transmissions += ",   ".join([f"{self.interferometer.chip._raw_output_labels[o]}: {raw_outs[o]*100:.2f}%" for o in range(nb_raw_outs)]) + linebreak
+            transmissions += ",   ".join([f"{self.interferometer.chip._processed_output_labels[o]}: {processed_outs[o]*100:.2f}%" for o in range(nb_processed_outs)])
 
         if return_plot:
             plot = BytesIO()
             plt.savefig(plot, format='png')
             plt.close()
-            return plot.getvalue()
+            return plot.getvalue(), transmissions
         plt.show()
+        print(transmissions)
 
     # Input fields ------------------------------------------------------------
 
@@ -582,42 +512,33 @@ class Context:
         """Observe the target with monochromatic approximation.
 
         Returns:
-            tuple[np.ndarray, np.ndarray, float]:
-                - Dark data (6,) — photon events
-                - Kernel data (3,) — photon events
-                - Bright data (1,) — photon events
+            np.ndarray[float]: Output intensities (photon events).
         """
 
-        ctx = copy(self)
-        ctx.interferometer.Δλ = 1 * u.nm
-        
-        nb_objects = len(ctx.target.companions) + 1
+        nb_outs = self.interferometer.chip.nb_raw_outputs
+        nb_objects = len(self.target.companions) + 1
 
-        ds = np.empty((nb_objects, 6), dtype=np.complex128)
-        bs = np.empty(nb_objects, dtype=np.complex128)
+        # Get output fields for all companions & star
+        out_fields = np.empty((nb_objects, nb_outs), dtype=np.complex128)
+        for companion, ψc in enumerate(self.get_input_fields()):
+            out_fields[companion] = self.interferometer.chip.get_output_fields(ψ=ψc, λ=self.interferometer.λ)
 
-        for ψ_i, ψ in enumerate(ctx.get_input_fields()):
+            # Scale down companions according to their contrast with target star
+            if companion > 0:
+                out_fields[companion] *= np.sqrt(self.target.companions[companion - 1].c)
 
-            _, d, b = ctx.interferometer.kn.get_output_fields(ψ=ψ, λ=ctx.interferometer.λ)
-            ds[ψ_i] = d
-            bs[ψ_i] = b
+        # Scale up all fields according to the target flux
+        out_fields *= np.sqrt(self.target._f)
 
-        bright = ctx.interferometer.camera.acquire_pixel(bs)
+        # Scale up all fields by the bandwidth
+        out_fields *= np.sqrt(self.interferometer._Δλ)
 
-        darks = np.empty(6)
-        for i in range(6):
-            darks[i] = ctx.interferometer.camera.acquire_pixel(ds[:, i])
+        # Acquire intensity for each output
+        outs = np.empty(nb_outs)
+        for o in range(nb_outs):
+            outs[o] = self.interferometer.camera.acquire(out_fields[:, o])
 
-        kernels = np.empty(3)
-        for i in range(3):
-            kernels[i] = darks[2*i] - darks[2*i+1]
-
-        # Multiply by the bandwidth
-        darks *= self.interferometer.Δλ.to(u.nm).value
-        kernels *= self.interferometer.Δλ.to(u.nm).value
-        bright *= self.interferometer.Δλ.to(u.nm).value
-
-        return darks, kernels, bright
+        return outs
     
     def observe(self, spectral_samples=5):
         """Observe the target in this context.
@@ -626,41 +547,30 @@ class Context:
             spectral_samples (int): Number of spectral samples to acquire (default: 5).
 
         Returns:
-            tuple[np.ndarray, np.ndarray, float]:
-                - Dark data (6,) — photon events
-                - Kernel data (3,) — photon events
-                - Bright data (1,) — photon events
+            np.ndarray[float]: Output intensities (photon events).
         """
 
+        # If this context use monochromatic approximation
         if self.monochromatic:
             return self.observe_monochromatic()
 
         # Sampling bandwidth
         λ_range = np.linspace(self.interferometer.λ - self.interferometer.Δλ/2, self.interferometer.λ + self.interferometer.Δλ/2, spectral_samples)
 
-        darks = np.empty((spectral_samples, 6))
-        kernels = np.empty((spectral_samples, 3))
-        brights = np.empty(spectral_samples)
+        # Initialize output array
+        nb_outs = self.interferometer.chip.nb_raw_outputs
+        outs = np.empty((spectral_samples, nb_outs))
 
-        # Monochromatic approximation
+        # Monochromatic approximation for each sub-band
         for i, λ in enumerate(λ_range):
             ctx_mono = copy(self)
             ctx_mono.interferometer.λ = λ
             ctx_mono.interferometer.Δλ = 1 * u.nm
 
-            d, k, b = ctx_mono.observe_monochromatic()
-
-            # Store the results for each wavelength
-            darks[i] = d
-            kernels[i] = k
-            brights[i] = b
+            _, outs[i] = ctx_mono.observe_monochromatic()
 
         # Integrate over the bandwidth
-        dark = np.trapz(darks, λ_range.value, axis=0)
-        kernel = np.trapz(kernels, λ_range.value, axis=0)
-        bright = np.trapz(brights, λ_range.value, axis=0)
-
-        return dark, kernel, bright
+        return np.trapz(outs, λ_range.value, axis=0)
 
     def observation_serie(
             self,
@@ -672,31 +582,26 @@ class Context:
             n (int): Number of nights (observations per given hour angle).
 
         Returns:
-            tuple[np.ndarray, np.ndarray, np.ndarray]:
-                - Dark data (n, n_h, 6) — photon events
-                - Kernel data (n, n_h, 3) — photon events
-                - Bright data (n, n_h) — photon events
+            np.ndarray[int]: Array of shape (n, nb_hour_angles, nb_outputs)
         """
 
+        # Get hour angle range
         h_range = self.get_h_range()
 
-        brights = np.empty((n, len(h_range)))
-        darks = np.empty((n, len(h_range), 6))
-        kernels = np.empty((n, len(h_range), 3))
+        # Initialize output array
+        nb_outs = self.interferometer.chip.nb_raw_outputs
+        outs = np.empty((n, len(h_range), nb_outs))
 
+        # Observe for each hour angle
         for h_i, h in enumerate(h_range):
             ctx = copy(self)
             ctx.h = h
 
+            # Observe n nights at this hour angle
             for n_i in range(n):
-                
-                d, k, b = ctx.observe()
+                outs[n_i, h_i,:] = ctx.observe()
 
-                brights[n_i, h_i] = b
-                darks[n_i, h_i] = d
-                kernels[n_i, h_i] = k
-
-        return darks, kernels, brights
+        return outs
     
     # Genetic calibration -----------------------------------------------------
 
@@ -746,13 +651,13 @@ class Context:
                 log = ""
 
                 # Getting observation with different phase shifts
-                self.interferometer.kn.φ[i-1] += Δφ
+                self.interferometer.chip.φ[i-1] += Δφ
                 _, k_pos, b_pos = self.observe()
 
-                self.interferometer.kn.φ[i-1] -= 2*Δφ
+                self.interferometer.chip.φ[i-1] -= 2*Δφ
                 _, k_neg, b_neg = self.observe()
 
-                self.interferometer.kn.φ[i-1] += Δφ
+                self.interferometer.chip.φ[i-1] += Δφ
                 _, k_old, b_old = self.observe()
 
                 # Computing throughputs
@@ -765,7 +670,7 @@ class Context:
 
                 # Save the history
                 depth_history.append(np.sum(k_old) / np.sum(b_old))
-                shifters_history.append(np.copy(self.interferometer.kn.φ.value))
+                shifters_history.append(np.copy(self.interferometer.chip.φ.value))
 
                 # Maximize the bright metric for group 1 shifters
                 if i in φb:
@@ -773,10 +678,10 @@ class Context:
 
                     if b_pos > b_old and b_pos > b_neg:
                         log += color.black(color.on_green(" + "))
-                        self.interferometer.kn.φ[i-1] += Δφ
+                        self.interferometer.chip.φ[i-1] += Δφ
                     elif b_neg > b_old and b_neg > b_pos:
                         log += color.black(color.on_green(" - "))
-                        self.interferometer.kn.φ[i-1] -= Δφ
+                        self.interferometer.chip.φ[i-1] -= Δφ
                     else:
                         log += color.black(color.on_green(" = "))
 
@@ -785,10 +690,10 @@ class Context:
                     log += "Shift " + color.black(color.on_lightgrey(f"{i}")) + " Kernel: " + color.black(color.on_blue(f"{k_neg:.2e} | {k_old:.2e} | {k_pos:.2e}")) + " -> "
 
                     if k_pos < k_old and k_pos < k_neg:
-                        self.interferometer.kn.φ[i-1] += Δφ
+                        self.interferometer.chip.φ[i-1] += Δφ
                         log += color.black(color.on_blue(" + "))
                     elif k_neg < k_old and k_neg < k_pos:
-                        self.interferometer.kn.φ[i-1] -= Δφ
+                        self.interferometer.chip.φ[i-1] -= Δφ
                         log += color.black(color.on_blue(" - "))
                     else:
                         log += color.black(color.on_blue(" = "))
@@ -798,7 +703,7 @@ class Context:
 
             Δφ *= β
 
-        self.interferometer.kn.φ = phase.bound(self.interferometer.kn.φ, self.interferometer.λ)
+        self.interferometer.chip.φ = phase.bound(self.interferometer.chip.φ, self.interferometer.λ)
 
         if plot:
 
@@ -847,8 +752,8 @@ class Context:
         """
 
 
-        kn = self.interferometer.kn
-        input_attenuation_backup = kn.input_attenuation.copy()
+        chip = self.interferometer.chip
+        input_attenuation_backup = chip.input_attenuation.copy()
         λ = self.interferometer.λ
         e = self.interferometer.camera.e
         total_photons = np.sum(self.pf.to(1/e.unit).value) * e.value
@@ -865,15 +770,15 @@ class Context:
             y = np.empty(n)
 
             if isinstance(p,list):
-                Δp = kn.φ[p[1]-1] - kn.φ[p[0]-1]
+                Δp = chip.φ[p[1]-1] - chip.φ[p[0]-1]
 
             for i in range(n):
 
                 if isinstance(p,list):
-                    kn.φ[p[0]-1] = i * λ / n
-                    kn.φ[p[1]-1] = (kn.φ[p[0]-1] + Δp) % λ
+                    chip.φ[p[0]-1] = i * λ / n
+                    chip.φ[p[1]-1] = (chip.φ[p[0]-1] + Δp) % λ
                 else:
-                    kn.φ[p-1] = i * λ / n
+                    chip.φ[p-1] = i * λ / n
             
                 _, _, b = self.observe()
                 y[i] = b / total_photons
@@ -884,10 +789,10 @@ class Context:
             popt, _ = curve_fit(sin, x, y, p0=[0], maxfev = 100_000)
 
             if isinstance(p,list):
-                kn.φ[p[0]-1] = (np.mod(popt[0]+λ.value/4, λ.value) * λ.unit).to(kn.φ.unit)
-                kn.φ[p[1]-1] = (kn.φ[p[0]-1] + Δp) % λ
+                chip.φ[p[0]-1] = (np.mod(popt[0]+λ.value/4, λ.value) * λ.unit).to(chip.φ.unit)
+                chip.φ[p[1]-1] = (chip.φ[p[0]-1] + Δp) % λ
             else:
-                kn.φ[p-1] = (np.mod(popt[0]+λ.value/4, λ.value) * λ.unit).to(kn.φ.unit)
+                chip.φ[p-1] = (np.mod(popt[0]+λ.value/4, λ.value) * λ.unit).to(chip.φ.unit)
 
             if plot:
                 axs[plt_coords].set_title(f"$|B(\phi{p})|$")
@@ -904,7 +809,7 @@ class Context:
             y = np.empty(n)
 
             for i in range(n):
-                kn.φ[p-1] = i * λ / n
+                chip.φ[p-1] = i * λ / n
                 _, k, b = self.observe()
                 y[i] = k[m-1] / b
             
@@ -913,7 +818,7 @@ class Context:
             
             popt, _ = curve_fit(sin, x, y, p0=[0], maxfev = 100_000)
 
-            kn.φ[p-1] = (np.mod(popt[0], λ.value) * λ.unit).to(kn.φ.unit)
+            chip.φ[p-1] = (np.mod(popt[0], λ.value) * λ.unit).to(chip.φ.unit)
 
             if plot:
                 axs[plt_coords].set_title(f"$K_{m}(\phi{p})$")
@@ -930,7 +835,7 @@ class Context:
             y = np.empty(n)
 
             for i in range(n):
-                kn.φ[p-1] = i * λ / n
+                chip.φ[p-1] = i * λ / n
                 d, _, b = self.observe()
                 y[i] = np.sum(np.abs(d[np.array(ds)-1])) / b
 
@@ -939,7 +844,7 @@ class Context:
             
             popt, _ = curve_fit(sin, x, y, p0=[0], maxfev = 100_000)
 
-            kn.φ[p-1] = (np.mod(popt[0]+λ.value/4, λ.value) * λ.unit).to(kn.φ.unit)
+            chip.φ[p-1] = (np.mod(popt[0]+λ.value/4, λ.value) * λ.unit).to(chip.φ.unit)
 
             if plot:
                 axs[plt_coords].set_title(f"$|D_{ds[0]}(\phi{p})| + |D_{ds[1]}(\phi{p})|$")
@@ -951,7 +856,7 @@ class Context:
                 axs[plt_coords].legend()
 
         # Bright maximization
-        self.interferometer.kn.input_attenuation = [1, 1, 0, 0]
+        self.interferometer.chip.input_attenuation = [1, 1, 0, 0]
         maximize_bright(2, plt_coords=(0,0))
         maximize_bright([1,2], plt_coords=(1,0))
 
@@ -960,28 +865,26 @@ class Context:
             axs[1,2].axis('off')
             plt.show()
 
-        return
-
-        self.interferometer.kn.input_attenuation = [0, 0, 1, 1]
+        self.interferometer.chip.input_attenuation = [0, 0, 1, 1]
         maximize_bright(4, plt_coords=(0,1))
         maximize_bright([3,4], plt_coords=(1,1))
 
-        self.interferometer.kn.input_attenuation = [1, 0, 1, 0]
+        self.interferometer.chip.input_attenuation = [1, 0, 1, 0]
         maximize_bright(7, plt_coords=(0,2))
         maximize_bright([5,7], plt_coords=(1,2))
 
         # Darks maximization
-        self.interferometer.kn.input_attenuation = [1, 0, 0, -1]
+        self.interferometer.chip.input_attenuation = [1, 0, 0, -1]
         maximize_darks(8, [1,2], plt_coords=(1,0))
 
         # Kernel minimization
-        self.interferometer.kn.input_attenuation = [1, 0, 0, 0]
+        self.interferometer.chip.input_attenuation = [1, 0, 0, 0]
         minimize_kernel(11, 1, plt_coords=(2,0))
         minimize_kernel(13, 2, plt_coords=(2,1))
         minimize_kernel(14, 3, plt_coords=(2,2))
 
-        kn.φ = phase.bound(kn.φ, λ)
-        kn.input_attenuation = input_attenuation_backup
+        chip.φ = phase.bound(chip.φ, λ)
+        chip.input_attenuation = input_attenuation_backup
 
         if plot:
             axs[1,1].axis('off')
@@ -1017,7 +920,7 @@ class Context:
                 η = 0.02, # Optical efficiency
                 telescopes = telescope.get_VLTI_UTs(),
                 name = "VLTI", # Interferometer name
-                kn = SuperKN(
+                chip = SuperKN(
                     φ = np.zeros(14) * u.um, # Injected phase shifts
                     σ = np.abs(np.random.normal(0, 1, 14)) * u.um, # Manufacturing OPD errors
                     λ0 = λ,
@@ -1069,7 +972,7 @@ class Context:
                 η = 0.02, # Optical efficiency
                 telescopes = telescope.get_VLTI_UTs(),
                 name = "LIFE", # Interferometer name
-                kn = SuperKN(
+                chip = SuperKN(
                     φ = np.zeros(14) * u.um, # Injected phase shifts
                     σ = np.abs(np.random.normal(0, 1, 14)) * u.um, # Manufacturing OPD errors
                     λ0 = λ,
@@ -1151,7 +1054,9 @@ def get_transmission_map_jit(
         λ: float,
         λ0: float,
         fov: float,
-        output_order: np.ndarray[int]
+        output_order: np.ndarray[int],
+        nb_raw_outputs: int,
+        nb_processed_outputs: int,
     ) -> tuple[np.ndarray[complex], np.ndarray[complex], np.ndarray[float]]:
     """
     Generate the transmission maps of this context with a given resolution
@@ -1166,12 +1071,12 @@ def get_transmission_map_jit(
     - λ0: Reference wavelength (in meter)
     - fov: Field of view in mas
     - output_order: Order of the outputs
+    - processed_outputs : If ``True``, also return the processed outputs transmission maps.
 
     Returns
     -------
-    - Null outputs map (3 x resolution x resolution)
-    - Dark outputs map (6 x resolution x resolution)
-    - Kernel outputs map (3 x resolution x resolution)
+    - Raw outputs transmission maps (nb_raw_outputs x resolution x resolution)
+    - Processed outputs transmission maps (nb_processed_outputs x resolution x resolution)
     """
 
     # Get the coordinates of the map
@@ -1180,9 +1085,8 @@ def get_transmission_map_jit(
     # mas to radian
     ρ_map = ρ_map / 1000 / 3600 / 180 * np.pi
 
-    n_maps = np.zeros((3, N, N), dtype=np.complex128)
-    d_maps = np.zeros((6, N, N), dtype=np.complex128)
-    k_maps = np.zeros((3, N, N), dtype=float)
+    raw_out_maps = np.empty((nb_raw_outputs, N, N))
+    processed_out_maps = np.empty((nb_processed_outputs, N, N))
 
     for x in range(N):
         for y in range(N):
@@ -1191,21 +1095,18 @@ def get_transmission_map_jit(
             ρ = ρ_map[x, y]
 
             ψ = get_unique_source_input_fields_jit(a=1, ρ=ρ, θ=θ, λ=λ, p=p)
+            raw_outs = np.abs(superkn.get_output_fields_jit(ψ, φ, σ, λ, λ0, output_order))**2
 
-            n, d, _ = superkn.get_output_fields_jit(ψ, φ, σ, λ, λ0, output_order)
+            for i in range(nb_raw_outputs):
+                raw_out_maps[i, x, y] = raw_outs[i]
 
-            k = np.array([np.abs(d[2*i])**2 - np.abs(d[2*i+1])**2 for i in range(3)])
+            if nb_processed_outputs > 0:
+                processed_outs = superkn.process_outputs_jit(raw_outs)
 
-            for i in range(3):
-                n_maps[i, x, y] = n[i]
+                for i in range(nb_processed_outputs):
+                    processed_out_maps[i, x, y] = processed_outs[i]
 
-            for i in range(6):
-                d_maps[i, x, y] = d[i]
-
-            for i in range(3):
-                k_maps[i, x, y] = k[i]
-
-    return np.abs(n_maps) ** 2, np.abs(d_maps) ** 2, k_maps
+    return raw_out_maps, processed_out_maps
 
 # Input fields ----------------------------------------------------------------
 

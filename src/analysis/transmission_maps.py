@@ -23,7 +23,7 @@ def gui(ctx: Context=None, N: int=100):
     """
     if ctx is None:
         ref_ctx = Context.get_VLTI()
-        ref_ctx.interferometer.kn.σ = np.zeros(14) * u.um
+        ref_ctx.interferometer.chip.σ = np.zeros(14) * u.um
     else:
         ref_ctx = ctx
     h_slider = widgets.FloatSlider(value=0, min=(ref_ctx.h - ref_ctx.Δh / 2).value, max=(ref_ctx.h + ref_ctx.Δh / 2).value, step=0.01, description='Hour angle:')
@@ -55,8 +55,8 @@ Returns
         (img, txt) = ctx.plot_transmission_maps(N=N, return_plot=True)
         plot.value = img
         transmission.value = txt
-        img_gradient = ctx.plot_transmission_map_gradient_norm(N=N, return_plot=True)
-        plot_gradient.value = img_gradient
+        (img, txt) = ctx.plot_transmission_maps(N=N, return_plot=True, grad=True)
+        plot_gradient.value = img
         run.button_style = ''
 
     def export_plot(*args):

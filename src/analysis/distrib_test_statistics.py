@@ -82,7 +82,7 @@ Returns
 """
     if ctx is None:
         ctx = Context.get_VLTI()
-        ctx.interferometer.kn.σ = np.zeros(14) * u.nm
+        ctx.interferometer.chip.σ = np.zeros(14) * u.nm
         ctx.target.companions[0].c = 0.0001
     else:
         ctx = copy(ctx)
@@ -181,7 +181,7 @@ Returns
 """
     if ctx is None:
         ctx = Context.get_VLTI()
-        ctx.interferometer.kn.σ = np.zeros(14) * u.nm
+        ctx.interferometer.chip.σ = np.zeros(14) * u.nm
         ctx.target.companions[0].c = 0.002
         ctx.monochromatic = False
     else:

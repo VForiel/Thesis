@@ -1,2 +1,5 @@
 
-from .archs import *
+class Chip:
+
+    def __init__(self):
+        ...

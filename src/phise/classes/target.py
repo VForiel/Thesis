@@ -136,7 +136,7 @@ class Target:
         self._f_unit = f.unit
         self._f = new_f
         if self.parent_ctx is not None:
-            self.parent_ctx.update_photon_flux()
+            self.parent_ctx._update_pf()
 
     @property
     def δ(self) -> u.Quantity:
@@ -167,7 +167,7 @@ class Target:
         self._δ_unit = δ.unit
         self._δ = new_δ
         if self.parent_ctx is not None:
-            self.parent_ctx.project_telescopes_position()
+            self.parent_ctx._update_p()
 
     @property
     def companions(self) -> list[Companion]:

@@ -33,15 +33,15 @@ Returns
     if λ is not None:
         ref_ctx.interferometer.λ = λ
     if φ is not None:
-        ref_ctx.interferometer.kn.φ = φ
+        ref_ctx.interferometer.chip.φ = φ
     if σ is not None:
-        ref_ctx.interferometer.kn.σ = σ
+        ref_ctx.interferometer.chip.σ = σ
     step = 1e-20
     IA_sliders = [widgets.FloatSlider(value=0.5, min=0, max=0.5, step=step, description=f'I{i + 1}', continuous_update=False) for i in range(4)]
     IP_sliders = [widgets.FloatSlider(value=0, min=0, max=λ.value, step=step, description=f'I{i + 1}', continuous_update=False) for i in range(4)]
     P_sliders = [widgets.FloatSlider(value=0, min=0, max=λ.value, step=step, description=f'P{i + 1}', continuous_update=False) for i in range(14)]
     for i in range(14):
-        P_sliders[i].value = ref_ctx.interferometer.kn.φ[i].to(λ.unit).value
+        P_sliders[i].value = ref_ctx.interferometer.chip.φ[i].to(λ.unit).value
 
     def beam_repr(beam: complex) -> str:
         """"beam_repr.
@@ -74,8 +74,8 @@ Returns
         ctx = copy(ref_ctx)
         ψ = np.array([IA_sliders[i].value * np.exp(1j * IP_sliders[i].value / λ.value * 2 * np.pi) for i in range(4)])
         for i in range(14):
-            ctx.interferometer.kn.φ[i] = P_sliders[i].value * λ.unit
-        (n, d, b) = ctx.interferometer.kn.get_output_fields(ψ=ψ, λ=λ)
+            ctx.interferometer.chip.φ[i] = P_sliders[i].value * λ.unit
+        (n, d, b) = ctx.interferometer.chip.get_output_fields(ψ=ψ, λ=λ)
         k = np.array([np.abs(d[2 * i]) ** 2 - np.abs(d[2 * i + 1]) ** 2 for i in range(3)])
         for (i, beam) in enumerate(ψ):
             inputs[i].value = f'<b>Input {i + 1} -</b> Amplitude: <code>{beam_repr(beam)}</code> Intensity: <code><b>{np.abs(beam) ** 2 * 100:.1f}%</b></code>'
@@ -86,7 +86,7 @@ Returns
             dark_outputs[i].value = f'<b>Dark {i + 1} -</b> Amplitude: <code>{beam_repr(beam)}</code> Intensity: <code><b>{np.abs(beam) ** 2 * 100:.1f}%</b></code>'
         for (i, beam) in enumerate(k):
             kernel_outputs[i].value = f'<b>Kernel {i + 1} -</b> Value: <code>{beam:.2e}</code>  KN depth: <code>{beam / np.abs(b) ** 2:.2e}</code>'
-        phases.value = ctx.interferometer.kn.plot_output_phase(λ=λ, plot=False, ψ=ψ)
+        phases.value = ctx.interferometer.chip.plot_output_phase(λ=λ, plot=False, ψ=ψ)
         for i in range(len(ψ)):
             plt.imshow([[np.abs(ψ[i]) ** 2]], cmap='hot', vmin=0, vmax=np.sum(np.abs(ψ) ** 2))
             plt.savefig(fname=f'docs/img/tmp.png', format='png')

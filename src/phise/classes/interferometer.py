@@ -1,6 +1,6 @@
 from astropy import units as u
 from copy import deepcopy as copy
-from .chip import SuperKN
+from .chip import Chip
 from .telescope import Telescope
 from .camera import Camera
 
@@ -18,13 +18,13 @@ class Interferometer:
         fov (u.Quantity): Field of view (mas).
         η (float): Global optical efficiency (0..1).
         telescopes (list[Telescope]): Telescopes defining the geometry.
-        kn (SuperKN): Kernel nuller configuration.
+        chip (Chip): Photonic Chip.
         camera (Camera): Associated camera.
         name (str, optional): Instrument name.
     """
-    __slots__ = ('_parent_ctx', '_l', '_λ', '_Δλ', '_fov', '_η', '_telescopes', '_kn', '_camera', '_name')
+    __slots__ = ('_parent_ctx', '_l', '_λ', '_Δλ', '_fov', '_η', '_telescopes', '_chip', '_camera', '_name')
 
-    def __init__(self, l: u.Quantity, λ: u.Quantity, Δλ: u.Quantity, fov: u.Quantity, η: float, telescopes: list[Telescope], kn: SuperKN, camera: Camera, name: str='Unnamed Interferometer'):
+    def __init__(self, l: u.Quantity, λ: u.Quantity, Δλ: u.Quantity, fov: u.Quantity, η: float, telescopes: list[Telescope], chip: Chip, camera: Camera, name: str='Unnamed Interferometer'):
         self._parent_ctx = None
         self.l = l
         self.λ = λ
@@ -34,8 +34,8 @@ class Interferometer:
         self.telescopes = copy(telescopes)
         for telescope in self.telescopes:
             telescope._parent_interferometer = self
-        self.kn = copy(kn)
-        self.kn._parent_interferometer = self
+        self.chip = copy(chip)
+        self.chip._parent_interferometer = self
         self.camera = copy(camera)
         self.camera._parent_interferometer = self
         self.name = name
@@ -51,7 +51,7 @@ class Interferometer:
         for telescope in self.telescopes:
             lines += str(telescope).split('\n')
         res += f'    ' + '\n    '.join(lines) + '\n'
-        res += f'  ' + '\n  '.join(str(self.kn).split('\n')) + '\n'
+        res += f'  ' + '\n  '.join(str(self.chip).split('\n')) + '\n'
         res += f'  ' + '\n  '.join(str(self.camera).split('\n'))
         return res
 
@@ -87,7 +87,7 @@ class Interferometer:
             raise ValueError('l must be in degrees')
         self._l = l
         if self.parent_ctx is not None:
-            self.parent_ctx.project_telescopes_position()
+            self.parent_ctx._update_p()
 
     @property
     def λ(self) -> u.Quantity:
@@ -118,7 +118,7 @@ class Interferometer:
             raise ValueError('λ must be in nanometers')
         self._λ = λ
         if self.parent_ctx is not None:
-            self.parent_ctx.update_photon_flux()
+            self.parent_ctx._update_pf()
 
     @property
     def Δλ(self) -> u.Quantity:
@@ -149,7 +149,7 @@ class Interferometer:
         if Δλ <= 0 * u.nm:
             raise ValueError('Δλ must be positive')
         if self.parent_ctx is not None:
-            self.parent_ctx.update_photon_flux()
+            self.parent_ctx._update_pf()
         self._Δλ = Δλ
 
     @property
@@ -208,28 +208,28 @@ class Interferometer:
             telescope._parent_interferometer = self
 
     @property
-    def kn(self) -> SuperKN:
-        """Associated `SuperKN` instance.
+    def chip(self) -> Chip:
+        """Associated `Chip` instance.
 
         Returns:
-            SuperKN: Kernel nuller configuration.
+            Chip: Photonic Chip configuration.
         """
-        return self._kn
+        return self._chip
 
-    @kn.setter
-    def kn(self, kn: SuperKN):
+    @chip.setter
+    def chip(self, chip: Chip):
         """Set kernel nuller.
 
         Args:
-            kn (SuperKN): Kernel nuller object.
+            chip (SuperKN): Kernel nuller object.
 
         Raises:
-            TypeError: If not a ``SuperKN`` instance.
+            TypeError: If not a ``Chip`` instance.
         """
-        if not isinstance(kn, SuperKN):
-            raise TypeError('kn must be a SuperKN object')
-        self._kn = copy(kn)
-        self._kn._parent_interferometer = self
+        if not isinstance(chip, Chip):
+            raise TypeError('chip must be a Chip object')
+        self._chip = copy(chip)
+        self._chip._parent_interferometer = self
 
     @property
     def camera(self) -> Camera:
@@ -326,4 +326,4 @@ class Interferometer:
             raise ValueError('η must be positive')
         self._η = η
         if self.parent_ctx is not None:
-            self.parent_ctx.update_photon_flux()
+            self.parent_ctx._update_pf()

@@ -53,7 +53,7 @@ def get_vectors(ctx=None, nmc: int = 1000, size: int = 1000):
         from phise.classes.context import Context
 
         ctx = Context.get_VLTI()
-        ctx.interferometer.kn.σ = np.zeros(14) * u.m
+        ctx.interferometer.chip.σ = np.zeros(14) * u.m
 
     if ctx.target.companions == []:
         raise ValueError(

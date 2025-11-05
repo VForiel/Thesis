@@ -139,7 +139,7 @@ class Camera:
             raise TypeError('name must be a string')
         self._name = name
 
-    def acquire_pixel(self, ψ: np.ndarray[complex]) -> int:
+    def acquire(self, ψ: np.ndarray[complex]) -> int:
         """Simulate acquisition of a pixel from complex electric fields.
 
         Computes the expected number of photons as the sum of powers |ψ|^2
@@ -165,29 +165,29 @@ class Camera:
             - For reproducibility, seed the RNG before calling (e.g.
               ``np.random.seed(...)``).
         """
-        return self.acquire_pixel_jit(ψ, self._e, ideal=self._ideal)
+        return acquire_jit(ψ, self._e, ideal=self._ideal)
 
-    @staticmethod
-    @nb.njit()
-    def acquire_pixel_jit(ψ: np.ndarray[complex], e: float, ideal=False) -> int:
-        """JIT-compiled version of ``acquire_pixel`` for use in Numba-jitted code.
+@staticmethod
+@nb.njit()
+def acquire_jit(ψ: np.ndarray[complex], e: float, ideal=False) -> int:
+    """JIT-compiled version of ``acquire`` for use in Numba-jitted code.
 
-        This method wraps ``acquire_pixel`` to allow its use within Numba-jitted
-        functions. Note that the performance gain is limited by the fact that
-        NumPy random functions are not JIT-compiled.
+    This method wraps ``acquire`` to allow its use within Numba-jitted
+    functions. Note that the performance gain is limited by the fact that
+    NumPy random functions are not JIT-compiled.
 
-        Args:
-            ψ (np.ndarray[complex]): 1D array (or broadcastable) of complex
-                electric field amplitudes (units: s**(-1/2)).
-            e (float): Exposure time in seconds.
-        Returns:
-            int: Number of detected photons during the exposure.
-        """
-        expected_photons = np.sum(np.abs(ψ) ** 2) * e
-        if ideal:
-            detected_photons = int(expected_photons)
-        elif expected_photons <= 2000000000.0:
-            detected_photons = np.random.poisson(expected_photons)
-        else:
-            detected_photons = int(expected_photons + np.random.normal(0, math.sqrt(expected_photons)))
-        return detected_photons
+    Args:
+        ψ (np.ndarray[complex]): 1D array (or broadcastable) of complex
+            electric field amplitudes (units: s**(-1/2)).
+        e (float): Exposure time in seconds.
+    Returns:
+        int: Number of detected photons during the exposure.
+    """
+    expected_photons = np.sum(np.abs(ψ) ** 2) * e
+    if ideal:
+        detected_photons = int(expected_photons)
+    elif expected_photons <= 2000000000.0:
+        detected_photons = np.random.poisson(expected_photons)
+    else:
+        detected_photons = int(expected_photons + np.random.normal(0, math.sqrt(expected_photons)))
+    return detected_photons

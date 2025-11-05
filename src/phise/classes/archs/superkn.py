@@ -13,10 +13,12 @@ from copy import deepcopy as copy
 from ...modules import mmi
 from ...modules import phase
 
+from ..chip import Chip
+
 class PhaseList(np.ndarray):
     ...
 
-class SuperKN:
+class SuperKN(Chip):
     """Kernel nuller representation for 4 telescopes.
 
     Args:
@@ -30,17 +32,36 @@ class SuperKN:
         input_opd (u.Quantity | None): Relative OPDs applied to the 4 inputs.
         name (str): Descriptive name.
     """
-    __slots__ = ('_parent_interferometer', '_φ', '_σ', '_λ0', '_output_order', '_input_attenuation', '_input_opd', '_name')
+    __slots__ = ('_parent_interferometer', '_φ', '_σ', '_λ0', '_output_order', '_input_attenuation', '_input_opd', '_name', '_raw_output_labels', '_processed_output_labels', 'nb_raw_outputs', 'nb_processed_outputs')
 
-    def __init__(self, φ: np.ndarray[u.Quantity], σ: np.ndarray[u.Quantity], λ0: u.Quantity, output_order: np.ndarray[int]=None, input_attenuation: np.ndarray[float]=None, input_opd: np.ndarray[u.Quantity]=None, name: str='Unnamed Kernel-Nuller'):
+    def __init__(
+            self,
+            φ: np.ndarray[u.Quantity],
+            σ: np.ndarray[u.Quantity],
+            λ0: u.Quantity,
+            output_order:np.ndarray[int]=None,
+            input_attenuation:np.ndarray[float]=None,
+            input_opd:np.ndarray[u.Quantity]=None,
+            name:str='Unnamed Kernel-Nuller'
+        ):
+
+        self._raw_output_labels = ['Bright', 'Dark 1', 'Dark 2', 'Dark 3', 'Dark 4', 'Dark 5', 'Dark 6']
+        self._processed_output_labels = ['Kernel 1', 'Kernel 2', 'Kernel 3']
+
+        self.nb_raw_outputs = 7
+        self.nb_processed_outputs = 3
+
         self._parent_interferometer = None
         self.φ = φ
         self.σ = σ
         self.λ0 = λ0
-        self.output_order = output_order if output_order is not None else np.array([0, 1, 2, 3, 4, 5])
+        self.output_order = output_order if output_order is not None else np.array([0, 1, 2, 3, 4, 5, 6])
         self.input_attenuation = input_attenuation if input_attenuation is not None else np.array([1.0, 1.0, 1.0, 1.0])
         self.input_opd = input_opd if input_opd is not None else np.zeros(4) * u.m
         self.name = name
+
+
+        super().__init__()
 
     #==========================================================================
     # Attributes
@@ -169,12 +190,15 @@ class SuperKN:
             output_order = np.array(output_order, dtype=int)
         except:
             raise ValueError(f'output_order must be an array of integers, not {type(output_order)}')
-        if output_order.shape != (6,):
-            raise ValueError(f'output_order must have a shape of (6,), not {output_order.shape}')
-        if not np.all(np.sort(output_order) == np.arange(6)):
-            raise ValueError(f'output_order must contain all the integers from 0 to 5, not {output_order}')
-        if output_order[0] - output_order[1] not in [-1, 1] or output_order[2] - output_order[3] not in [-1, 1] or output_order[4] - output_order[5] not in [-1, 1]:
+        if output_order.shape != (self.nb_raw_outputs,):
+            raise ValueError(f'output_order must have a shape of ({self.nb_raw_outputs},), not {output_order.shape}')
+        if not np.all(np.sort(output_order) == np.arange(self.nb_raw_outputs)):
+            raise ValueError(f'output_order must contain all the integers from 0 to {self.nb_raw_outputs - 1}, not {output_order}')
+        
+        # Specitifc criteria for valid output pairs
+        if output_order[1] - output_order[2] not in [-1, 1] or output_order[3] - output_order[4] not in [-1, 1] or output_order[5] - output_order[6] not in [-1, 1]:
             raise ValueError(f'output_order contain an invalid configuration of output pairs. Found {output_order}')
+        
         self._output_order = output_order
 
     def rebind_outputs(self, λ):
@@ -191,20 +215,20 @@ class SuperKN:
         """
         ψ = np.zeros(4, dtype=complex)
         ψ[0] = ψ[3] = (1 + 0j) * np.sqrt(1 / 2)
-        (_, d, _) = self.get_output_fields(ψ=ψ, λ=λ)
+        d = self.get_output_fields(ψ=ψ, λ=λ)[1:]
         k1 = np.argsort((d * np.conj(d)).real)[:2]
         ψ = np.zeros(4, dtype=complex)
         ψ[0] = ψ[2] = (1 + 0j) * np.sqrt(1 / 2)
-        (_, d, _) = self.get_output_fields(ψ=ψ, λ=λ)
+        d = self.get_output_fields(ψ=ψ, λ=λ)[1:]
         k2 = np.argsort((d * np.conj(d)).real)[:2]
         ψ = np.zeros(4, dtype=complex)
         ψ[0] = ψ[1] = (1 + 0j) * np.sqrt(1 / 2)
-        (_, d, _) = self.get_output_fields(ψ=ψ, λ=λ)
+        d = self.get_output_fields(ψ=ψ, λ=λ)[1:]
         k3 = np.argsort((d * np.conj(d)).real)[:2]
         ψ = np.zeros(4, dtype=complex)
         ψ[0] = ψ[1] = (1 + 0j) * np.sqrt(1 / 2)
         ψ[1] *= np.exp(-1j * np.pi / 2)
-        (_, d, _) = self.get_output_fields(ψ=ψ, λ=λ)
+        d = self.get_output_fields(ψ=ψ, λ=λ)[1:]
         dk1 = d[k1]
         diff = np.abs(dk1[0] - dk1[1])
         if diff < 0:
@@ -216,12 +240,12 @@ class SuperKN:
         ψ = np.zeros(4, dtype=complex)
         ψ[0] = ψ[1] = (1 + 0j) * np.sqrt(1 / 2)
         ψ[2] *= np.exp(-1j * np.pi / 2)
-        (_, d, _) = self.get_output_fields(ψ=ψ, λ=λ)
+        d = self.get_output_fields(ψ=ψ, λ=λ)[1:]
         dk3 = d[k3]
         diff = np.abs(dk3[0] - dk3[1])
         if diff < 0:
             k3 = np.flip(k3)
-        self.output_order = np.concatenate([k1, k2, k3])
+        self.output_order = np.concatenate([[0], k1+1, k2+1, k3+1])
 
     # Input properties --------------------------------------------------------
 
@@ -344,22 +368,15 @@ class SuperKN:
     # Wave propagation --------------------------------------------------------
 
     def get_output_fields(self, ψ: np.ndarray[complex], λ: u.Quantity) -> Tuple[np.ndarray, np.ndarray, np.ndarray, float]:
-        """Propagate fields through the kernel nuller.
-
-        Simulates optical propagation for 4 inputs at a given wavelength,
-        accounting for input attenuations and OPDs. Returns complex electric
-        fields of the null, dark, and bright outputs.
-
+        """
+        Propagate input fields through the kernel nuller.
         Args:
             ψ (np.ndarray[complex]): Input complex fields for the 4 channels (shape (4,)).
             λ (u.Quantity): Wavelength for propagation.
 
         Returns:
-            tuple: (null_fields, dark_fields, bright_field, total_bright)
-                - null_fields: np.ndarray complex, shape (3,)
-                - dark_fields: np.ndarray complex, shape (6,)
-                - bright_field: np.ndarray complex, shape (1,) or scalar
-                - total_bright: float
+            Tuple[np.ndarray, np.ndarray, np.ndarray, float]: Output complex
+            fields (shape (7,)).
         """
         φ = self.φ.to(λ.unit).value
         σ = self.σ.to(λ.unit).value
@@ -367,6 +384,16 @@ class SuperKN:
         ψ *= self.input_attenuation
         ψ *= np.exp(-1j * 2 * np.pi * self.input_opd.to(λ.unit).value / λ.value)
         return get_output_fields_jit(ψ=ψ, φ=φ, σ=σ, λ=λ.value, λ0=λ0, output_order=self.output_order)
+    
+    def process_outputs(self, out: np.ndarray[float]) -> np.ndarray[float]:
+        """
+        Compute processed kernel outputs from raw output intensities.
+        Args:
+            out (np.ndarray[float]): Raw output intensities (shape (7,)).
+        Returns:
+            np.ndarray[float]: Processed kernel outputs (shape (4,)).
+        """
+        return process_outputs_jit(out)
     
     # Plotting ----------------------------------------------------------------
 
@@ -387,58 +414,33 @@ class SuperKN:
         ψ2 = np.array([0, ψ[1], 0, 0])
         ψ3 = np.array([0, 0, ψ[2], 0])
         ψ4 = np.array([0, 0, 0, ψ[3]])
-        (n1, d1, b1) = self.get_output_fields(ψ1, λ)
-        (n2, d2, b2) = self.get_output_fields(ψ2, λ)
-        (n3, d3, b3) = self.get_output_fields(ψ3, λ)
-        (n4, d4, b4) = self.get_output_fields(ψ4, λ)
-        n2 = np.abs(n2) * np.exp(1j * (np.angle(n2) - np.angle(n1)))
-        n3 = np.abs(n3) * np.exp(1j * (np.angle(n3) - np.angle(n1)))
-        n4 = np.abs(n4) * np.exp(1j * (np.angle(n4) - np.angle(n1)))
-        d2 = np.abs(d2) * np.exp(1j * (np.angle(d2) - np.angle(d1)))
-        d3 = np.abs(d3) * np.exp(1j * (np.angle(d3) - np.angle(d1)))
-        d4 = np.abs(d4) * np.exp(1j * (np.angle(d4) - np.angle(d1)))
-        b2 = np.abs(b2) * np.exp(1j * (np.angle(b2) - np.angle(b1)))
-        b3 = np.abs(b3) * np.exp(1j * (np.angle(b3) - np.angle(b1)))
-        b4 = np.abs(b4) * np.exp(1j * (np.angle(b4) - np.angle(b1)))
-        n1 = np.abs(n1) * np.exp(1j * 0)
-        d1 = np.abs(d1) * np.exp(1j * 0)
-        b1 = np.abs(b1) * np.exp(1j * 0)
-        (_, axs) = plt.subplots(2, 6, figsize=(20, 7.5), subplot_kw={'projection': 'polar'})
-        axs[0, 0].scatter(np.angle(b1), np.abs(b1), color='yellow', label='Input 1', alpha=0.5)
-        axs[0, 0].plot([0, np.angle(b1)], [0, np.abs(b1)], color='yellow', alpha=0.5)
-        axs[0, 0].scatter(np.angle(b2), np.abs(b2), color='green', label='Input 2', alpha=0.5)
-        axs[0, 0].plot([0, np.angle(b2)], [0, np.abs(b2)], color='green', alpha=0.5)
-        axs[0, 0].scatter(np.angle(b3), np.abs(b3), color='red', label='Input 3', alpha=0.5)
-        axs[0, 0].plot([0, np.angle(b3)], [0, np.abs(b3)], color='red', alpha=0.5)
-        axs[0, 0].scatter(np.angle(b4), np.abs(b4), color='blue', label='Input 4', alpha=0.5)
-        axs[0, 0].plot([0, np.angle(b4)], [0, np.abs(b4)], color='blue', alpha=0.5)
-        axs[0, 0].set_title('Bright output')
-        for n in range(3):
-            axs[0, n + 1].scatter(np.angle(n1[n]), np.abs(n1[n]), color='yellow', label='Input 1', alpha=0.5)
-            axs[0, n + 1].plot([0, np.angle(n1[n])], [0, np.abs(n1[n])], color='yellow', alpha=0.5)
-            axs[0, n + 1].scatter(np.angle(n2[n]), np.abs(n2[n]), color='green', label='Input 2', alpha=0.5)
-            axs[0, n + 1].plot([0, np.angle(n2[n])], [0, np.abs(n2[n])], color='green', alpha=0.5)
-            axs[0, n + 1].scatter(np.angle(n3[n]), np.abs(n3[n]), color='red', label='Input 3', alpha=0.5)
-            axs[0, n + 1].plot([0, np.angle(n3[n])], [0, np.abs(n3[n])], color='red', alpha=0.5)
-            axs[0, n + 1].scatter(np.angle(n4[n]), np.abs(n4[n]), color='blue', label='Input 4', alpha=0.5)
-            axs[0, n + 1].plot([0, np.angle(n4[n])], [0, np.abs(n4[n])], color='blue', alpha=0.5)
-            axs[0, n + 1].set_title(f'Null output {n + 1}')
-        for d in range(6):
-            axs[1, d].scatter(np.angle(d1[d]), np.abs(d1[d]), color='yellow', label='I1', alpha=0.5)
-            axs[1, d].plot([0, np.angle(d1[d])], [0, np.abs(d1[d])], color='yellow', alpha=0.5)
-            axs[1, d].scatter(np.angle(d2[d]), np.abs(d2[d]), color='green', label='I2', alpha=0.5)
-            axs[1, d].plot([0, np.angle(d2[d])], [0, np.abs(d2[d])], color='green', alpha=0.5)
-            axs[1, d].scatter(np.angle(d3[d]), np.abs(d3[d]), color='red', label='I3', alpha=0.5)
-            axs[1, d].plot([0, np.angle(d3[d])], [0, np.abs(d3[d])], color='red', alpha=0.5)
-            axs[1, d].scatter(np.angle(d4[d]), np.abs(d4[d]), color='blue', label='I4', alpha=0.5)
-            axs[1, d].plot([0, np.angle(d4[d])], [0, np.abs(d4[d])], color='blue', alpha=0.5)
-            axs[1, d].set_title(f'Dark output {d + 1}')
-        m = np.max(np.concatenate([np.abs(n1), np.abs(n2), np.abs(n3), np.abs(n4), np.abs(d1), np.abs(d2), np.abs(d3), np.abs(d4), np.array([np.abs(b1), np.abs(b2), np.abs(b3), np.abs(b4)])]))
-        for ax in axs.flatten():
+        out1 = self.get_output_fields(ψ1, λ)
+        out2 = self.get_output_fields(ψ2, λ)
+        out3 = self.get_output_fields(ψ3, λ)
+        out4 = self.get_output_fields(ψ4, λ)
+
+        out2 = np.abs(out2[0]) * np.exp(1j * (np.angle(out2[0]) - np.angle(out1[0])))
+        out3 = np.abs(out3[0]) * np.exp(1j * (np.angle(out3[0]) - np.angle(out1[0])))
+        out4 = np.abs(out4[0]) * np.exp(1j * (np.angle(out4[0]) - np.angle(out1[0])))
+        out1 = np.abs(out1) * np.exp(1j * 0)
+
+        n_out = len(out1)
+        outs = np.array([out1, out2, out3, out4])
+
+        _, axs = plt.subplots(n_out, 1, figsize=(5, 5*n_out), subplot_kw={'projection': 'polar'})
+        for i in range(len(out1)):
+
+            colors = ['yellow', 'green', 'red', 'blue']
+            for j, out in enumerate(outs):
+
+                axs[j].scatter(np.angle(out), np.abs(out), color=colors[j], label=f'Input {j + 1}', alpha=0.5)
+                axs[j].plot([0, np.angle(out)], [0, np.abs(out)**2], color=colors[j], alpha=0.5)
+
+        m = np.max(np.abs(outs)**2)
+        for i, ax in enumerate(axs.flatten()):
             ax.set_ylim(0, m)
-        axs[0, 4].axis('off')
-        axs[0, 5].axis('off')
-        axs[0, 0].legend()
+            ax.set_title(f'{self._raw_output_labels[i]} output')
+        axs[0].legend()
         if not plot:
             plot = BytesIO()
             plt.savefig(plot, format='png')
@@ -446,12 +448,20 @@ class SuperKN:
             return plot.getvalue()
         plt.show()
 
+
 #==============================================================================
 # Numba-accelerated functions
 #==============================================================================
 
 @nb.njit()
-def get_output_fields_jit(ψ: np.ndarray[complex], φ: np.ndarray[float], σ: np.ndarray[float], λ: float, λ0: float, output_order: np.ndarray[int]) -> tuple[np.ndarray[float], np.ndarray[float], np.ndarray[float], float]:
+def get_output_fields_jit(
+        ψ: np.ndarray[complex],
+        φ: np.ndarray[float],
+        σ: np.ndarray[float],
+        λ: float,
+        λ0: float,
+        output_order: np.ndarray[int]
+    ) -> tuple[np.ndarray[float], np.ndarray[float], np.ndarray[float], float]:
     """Simulate a 4-telescope Kernel Nuller propagation (numeric approach).
 
     Note: Does not account for input attenuation and OPD.
@@ -471,30 +481,70 @@ def get_output_fields_jit(ψ: np.ndarray[complex], φ: np.ndarray[float], σ: np
             - bright: Bright output (complex field)
     """
     λ_ratio = λ0 / λ
-    N = 1 / np.sqrt(2) * np.array([[1 + 0j, 1 + 0j], [1 + 0j, np.exp(-1j * np.pi * λ_ratio)]], dtype=np.complex128)
+    
+    # 2x2 Nuller
+    N = 1 / np.sqrt(2) * np.array([
+        [1,  1],
+        [1, -1]
+    ],dtype=np.complex128)
+
+    # Adjust for wavelength
     Na = np.abs(N)
     Nφ = np.angle(N)
     N = Na * np.exp(1j * Nφ * λ_ratio)
+
+    # 2x2 Cross-Recombiner
     θ: float = np.pi / 2
-    R = 1 / np.sqrt(2) * np.array([[np.exp(1j * θ / 2), np.exp(-1j * θ / 2)], [np.exp(-1j * θ / 2), np.exp(1j * θ / 2)]])
+    R = 1 / np.sqrt(2) * np.array([
+        [np.exp(1j * θ / 2), np.exp(-1j * θ / 2)],
+        [np.exp(-1j * θ / 2), np.exp(1j * θ / 2)]
+    ],dtype=np.complex128)
+
+    # Adjust for wavelength
     Ra = np.abs(R)
     Rφ = np.angle(R)
     R = Ra * np.exp(1j * Rφ * λ_ratio)
-    φ = phase.bound_jit(φ + σ, λ)
-    nuller_inputs = phase.shift_jit(ψ, φ[:4], λ)
-    N1 = np.dot(N, nuller_inputs[:2])
-    N2 = N @ nuller_inputs[2:]
-    N1_shifted = phase.shift_jit(N1, φ[4:6], λ)
-    N2_shifted = phase.shift_jit(N2, φ[6:8], λ)
-    N3 = N @ np.array([N1_shifted[0], N2_shifted[0]])
-    N4 = N @ np.array([N1_shifted[1], N2_shifted[1]])
-    nulls = np.array([N3[1], N4[0], N4[1]], dtype=np.complex128)
-    bright = N3[0]
-    R_inputs = np.array([N3[1], N3[1], N4[0], N4[0], N4[1], N4[1]]) * 1 / np.sqrt(2)
-    R_inputs = phase.shift_jit(R_inputs, φ[8:], λ)
-    R1_output = R @ np.array([R_inputs[0], R_inputs[2]])
-    R2_output = R @ np.array([R_inputs[1], R_inputs[4]])
-    R3_output = R @ np.array([R_inputs[3], R_inputs[5]])
-    darks = np.array([R1_output[0], R1_output[1], R2_output[0], R2_output[1], R3_output[0], R3_output[1]], dtype=np.complex128)
-    darks = darks[output_order]
-    return (nulls, darks, bright)
+
+    # Add first layer of perturbations & shifts
+    Φ = φ + σ # merge perturbations and shifts
+    ψ0 = phase.shift_jit(ψ, Φ[:4], λ)
+
+    # First layer of nullers
+    ψtmp1 = N @ ψ0[:2]
+    ψtmp2 = N @ ψ0[2:]
+    ψ1 = np.array([ψtmp1[0], ψtmp1[1], ψtmp2[0], ψtmp2[1]], dtype=np.complex128)
+
+    # Second layer of perturbations & shifts
+    ψ1 = phase.shift_jit(ψ1, φ[4:8], λ)
+
+    # Second layer of nullers
+    ψtmp1 = N @ np.array([ψ1[0], ψ1[2]])
+    ψtmp2 = N @ np.array([ψ1[1], ψ1[3]])
+    ψ2 = np.array([ψtmp1[0], ψtmp1[1], ψtmp2[0], ψtmp2[1]], dtype=np.complex128)
+
+    # Splitters and final bright output
+    ψb = ψ2[0]
+    ψ3 = ψ2[1:].repeat(2) * 1 / np.sqrt(2) 
+
+    # Final perturbations & shifts
+    ψ3 = phase.shift_jit(ψ3, φ[8:], λ)
+
+    # Final recombination
+    ψtmp1 = R @ np.array([ψ3[0], ψ3[2]])
+    ψtmp2 = R @ np.array([ψ3[1], ψ3[4]])
+    ψtmp3 = R @ np.array([ψ3[3], ψ3[5]])
+
+    ψout = np.array([ψb, ψtmp1[0], ψtmp1[1], ψtmp2[0], ψtmp2[1], ψtmp3[0], ψtmp3[1]], dtype=np.complex128)
+    return ψout[output_order]
+
+@nb.njit()
+def process_outputs_jit(out: np.ndarray[complex]) -> np.ndarray[float]:
+    """Compute kernel outputs from dark outputs intensities.
+
+    Args:
+        darks (np.ndarray[complex]): Array of 6 dark outputs (complex fields).
+    """
+    k1 = out[1] - out[2]
+    k2 = out[3] - out[4]
+    k3 = out[5] - out[6]
+    return np.array([k1, k2, k3], dtype=np.float64)

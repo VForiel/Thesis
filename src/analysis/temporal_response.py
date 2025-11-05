@@ -27,8 +27,8 @@ def gui(ctx: Context=None):
     if ctx is None:
         ctx = Context.get_VLTI()
         ctx.Δh = 24 * u.hourangle
-        ctx.interferometer.kn.σ = np.zeros(14) * u.nm
-        ctx.interferometer.kn.φ = np.zeros(14) * u.um
+        ctx.interferometer.chip.σ = np.zeros(14) * u.nm
+        ctx.interferometer.chip.φ = np.zeros(14) * u.um
     else:
         ctx = copy(ctx)
     if len(ctx.target.companions) > 3:
@@ -142,8 +142,8 @@ Returns
 (Automatically added placeholder.)
 """
     ideal_ctx = copy(ctx)
-    ideal_ctx.interferometer.kn.σ = np.zeros(14) * u.nm
-    ideal_ctx.interferometer.kn.φ = np.zeros(14) * u.um
+    ideal_ctx.interferometer.chip.σ = np.zeros(14) * u.nm
+    ideal_ctx.interferometer.chip.φ = np.zeros(14) * u.um
     ideal_ctx.Γ = 0 * u.nm
     ideal_ctx.target.name = 'Ideal Target'
     selected_kernel = 0

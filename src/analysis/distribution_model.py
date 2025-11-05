@@ -25,7 +25,7 @@ Returns
 """
     if ctx is None:
         ctx = Context.get_VLTI()
-        ctx.interferometer.kn.σ = np.zeros(14) * u.nm
+        ctx.interferometer.chip.σ = np.zeros(14) * u.nm
     else:
         ctx = copy(ctx)
     ctx.Δh = ctx.interferometer.camera.e.to(u.hour).value * u.hourangle

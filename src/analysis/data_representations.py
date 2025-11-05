@@ -34,7 +34,7 @@ def instant_distribution(ctx: Context=None, n=10000, stat=np.median, figsize=(10
     """
     if ctx is None:
         ctx = Context.get_VLTI()
-        ctx.interferometer.kn.σ = np.zeros(14) * u.um
+        ctx.interferometer.chip.σ = np.zeros(14) * u.um
         ctx.target.companions[0].c = 0.1
     else:
         ctx = copy(ctx)
@@ -101,7 +101,7 @@ def time_evolution(ctx: Context=None, n=100, map=np.median) -> np.ndarray:
     """
     if ctx is None:
         ctx = Context.get_VLTI()
-        ctx.interferometer.kn.σ = np.zeros(14) * u.um
+        ctx.interferometer.chip.σ = np.zeros(14) * u.um
         ctx.Γ = 10 * u.nm
     else:
         ctx = copy(ctx)

@@ -51,7 +51,7 @@ class Telescope:
         self._a_unit = a.unit
         self._a = new_a
         if self.parent_interferometer is not None:
-            self.parent_interferometer.parent_ctx.update_photon_flux()
+            self.parent_interferometer.parent_ctx._update_pf()
 
     @property
     def r(self) -> u.Quantity:
@@ -75,7 +75,7 @@ class Telescope:
         self._r_unit = r.unit
         self._r = new_r
         if self.parent_interferometer is not None:
-            self.parent_interferometer.parent_ctx.project_telescopes_position()
+            self.parent_interferometer.parent_ctx._update_p()
 
     @property
     def name(self) -> str:

@@ -40,8 +40,8 @@ def plot(ctx: Context=None, β=0.5, n=1000, figsize=(15, 5)):
     ctx_perturbated.target.companions = []
     ctx_ideal = copy(ctx_perturbated)
     ctx_ideal.name = 'Ideal'
-    ctx_ideal.interferometer.kn.σ = np.zeros(14) * u.nm
-    ctx_ideal.interferometer.kn.φ = np.zeros(14) * u.nm
+    ctx_ideal.interferometer.chip.σ = np.zeros(14) * u.nm
+    ctx_ideal.interferometer.chip.φ = np.zeros(14) * u.nm
     print('⌛ Calibrating using straightforward approach...')
     ctx_gen = copy(ctx_perturbated)
     ctx_gen.name = 'Trial & Error'

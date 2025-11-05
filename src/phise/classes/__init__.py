@@ -13,7 +13,9 @@ from .target import Target
 from . import telescope
 from .telescope import Telescope
 from . import chip
-from .chip import SuperKN
+from .chip import Chip
+from . import archs
+from .archs import SuperKN
 from . import interferometer
 from .interferometer import Interferometer
 from . import context

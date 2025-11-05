@@ -22,6 +22,5 @@ dependencies:
     - LRFutils==0.1.2
     - fitter==1.7.1
     - toml
-    - -e .
 
 # End of environment.yml
