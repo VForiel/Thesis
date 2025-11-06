@@ -1,0 +1,13 @@
+numpy
+matplotlib
+astropy
+scipy
+sympy
+numba
+nbformat
+pandas
+jupyterlab
+ipykernel
+notebook
+LRFutils
+fitter

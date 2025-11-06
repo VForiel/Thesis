@@ -7,24 +7,12 @@ authors = [
     {name = "VForiel", email = "vince.lrf@gmail.com"},
     {name = "VForiel", email = "vincent.foriel@gmail.com"},
 ]
-dependencies = [
-    "numpy>=1.26.4",
-    "matplotlib>=3.10.3",
-    "astropy>=7.1.0",
-    "scipy>=1.16.0",
-    "ipywidgets>=8.1.7",
-    "sympy>=1.14.0",
-    "fitter>=1.7.1",
-    "numba>=0.61.2",
-    "LRFutils>=0.1.2",
-    "nbformat>=5.10.4",
-    "pip>=25.1.1",
-    "gitpython>=3.1.44",
-    "toml",
-]
 requires-python = ">=3.11.0"
 readme = "README.md"
 license = {text = "MIT"}
+dynamic = ["dependencies"]
+[tool.setuptools.dynamic]
+dependencies = {file = ["requirements.txt"]}
 
 
 [tool.pdm]
