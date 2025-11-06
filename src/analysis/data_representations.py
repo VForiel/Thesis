@@ -46,10 +46,15 @@ def instant_distribution(ctx: Context=None, n=10000, stat=np.median, figsize=(10
     data = np.empty((n, 3))
     ref_data = np.empty((n, 3))
     for i in range(n):
-        (_, k, b) = ctx.observe()
+        # observe() returns raw intensities; process to get kernels
+        outs = ctx.observe()
+        k = ctx.interferometer.chip.process_outputs(outs)
+        b = outs[0]
         data[i] = k / b
-        (_, k, b) = ref_ctx.observe()
-        ref_data[i] = k / b
+        outs_ref = ref_ctx.observe()
+        k_ref = ref_ctx.interferometer.chip.process_outputs(outs_ref)
+        b_ref = outs_ref[0]
+        ref_data[i] = k_ref / b_ref
     (_, axs) = plt.subplots(3, 1, figsize=figsize, sharex=True, constrained_layout=True)
     kmin_k = np.zeros(3)
     kmax_k = np.zeros(3)

@@ -41,7 +41,9 @@ def plot(ctx: Context=None, resolution: int=100, n=100, map=np.median):
         ctx.h = h
         raw_data = np.empty((n, 3))
         for j in range(n):
-            (_, k, _) = ctx.observe()
+            # observe now returns intensities; extract kernels via process_outputs
+            outs = ctx.observe()
+            k = ctx.interferometer.chip.process_outputs(outs)
             raw_data[j] = k
         transmission_maps = ctx.get_transmission_maps(N=resolution)[2]
         for k in range(3):

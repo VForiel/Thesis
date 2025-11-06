@@ -195,10 +195,12 @@ Returns
     h1_data_kn = np.empty(samples)
     for i in range(samples):
         print(f'{(i + 1) / samples * 100:.2f}% ({i + 1}/{samples})', end='\r')
-        (_, k, _) = ctx_star_only.observe()
-        h0_data_kn[i] = k[0]
-        (_, k, _) = ctx.observe()
-        h1_data_kn[i] = k[0]
+        outs0 = ctx_star_only.observe()
+        k0 = ctx_star_only.interferometer.chip.process_outputs(outs0)
+        h0_data_kn[i] = k0[0]
+        outs1 = ctx.observe()
+        k1 = ctx.interferometer.chip.process_outputs(outs1)
+        h1_data_kn[i] = k1[0]
     print('✅ Distributions generated.')
     (x0, γ0) = stats.cauchy.fit(h0_data_kn)
     (x1, γ1) = stats.cauchy.fit(h1_data_kn)
@@ -243,10 +245,12 @@ Returns
         t0_gennorm[i] = stats.gennorm.rvs(beta=β0, loc=m0, scale=s0, size=samples)
         t1_gennorm[i] = stats.gennorm.rvs(beta=β1, loc=m1, scale=s1, size=samples)
         for j in range(samples):
-            (_, k, _) = ctx_star_only.observe()
-            t0_sim[i, j] = k[0]
-            (_, k, _) = ctx.observe()
-            t1_sim[i, j] = k[0]
+            outs0 = ctx_star_only.observe()
+            k0 = ctx_star_only.interferometer.chip.process_outputs(outs0)
+            t0_sim[i, j] = k0[0]
+            outs1 = ctx.observe()
+            k1 = ctx.interferometer.chip.process_outputs(outs1)
+            t1_sim[i, j] = k1[0]
     print('✅ Random distributions generated.')
     print('⌛ Plotting ROC curves...')
 

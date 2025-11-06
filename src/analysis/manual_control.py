@@ -55,8 +55,9 @@ Returns
 (Automatically added placeholder.)
 """
         return f'<b>{np.abs(beam):.2e}</b> * exp(<b>{np.angle(beam) / np.pi:.2f}</b> pi i)'
+    # HTML widgets for displaying values
     inputs = [widgets.HTML(value=f' ') for _ in range(4)]
-    null_outputs = [widgets.HTML(value=f' ') for _ in range(4)]
+    bright_output = widgets.HTML(value=f' ')
     dark_outputs = [widgets.HTML(value=f' ') for _ in range(6)]
     kernel_outputs = [widgets.HTML(value=f' ') for _ in range(3)]
 
@@ -75,18 +76,27 @@ Returns
         ψ = np.array([IA_sliders[i].value * np.exp(1j * IP_sliders[i].value / λ.value * 2 * np.pi) for i in range(4)])
         for i in range(14):
             ctx.interferometer.chip.φ[i] = P_sliders[i].value * λ.unit
-        (n, d, b) = ctx.interferometer.chip.get_output_fields(ψ=ψ, λ=λ)
-        k = np.array([np.abs(d[2 * i]) ** 2 - np.abs(d[2 * i + 1]) ** 2 for i in range(3)])
+
+        # Compute raw outputs (intensities) and processed kernels
+        out_fields = ctx.interferometer.chip.get_output_fields(ψ=ψ, λ=λ)
+        raw_outs = np.abs(out_fields) ** 2
+        k = ctx.interferometer.chip.process_outputs(raw_outs)
+        b = raw_outs[0]
+        d = raw_outs[1:]
+
+        # Update textual widgets
         for (i, beam) in enumerate(ψ):
             inputs[i].value = f'<b>Input {i + 1} -</b> Amplitude: <code>{beam_repr(beam)}</code> Intensity: <code><b>{np.abs(beam) ** 2 * 100:.1f}%</b></code>'
-        null_outputs[0].value = f'<b>N3a -</b> Amplitude: <code>{beam_repr(b)}</code> Intensity: <code><b>{np.abs(b) ** 2 * 100:.1f}%</b></code> <b><- Bright channel</b>'
-        for (i, beam) in enumerate(n):
-            null_outputs[i + 1].value = f"<b>N{(i - 1) // 2 + 4}{['a', 'b'][(i + 1) % 2]} -</b> Amplitude: <code>{beam_repr(beam)}</code> Intensity: <code><b>{np.abs(beam) ** 2 * 100:.1f}%</b></code>"
+        bright_output.value = f'<b>Bright -</b> Intensity: <code><b>{b * 100:.3e}%</b></code>'
         for (i, beam) in enumerate(d):
-            dark_outputs[i].value = f'<b>Dark {i + 1} -</b> Amplitude: <code>{beam_repr(beam)}</code> Intensity: <code><b>{np.abs(beam) ** 2 * 100:.1f}%</b></code>'
+            dark_outputs[i].value = f'<b>Dark {i + 1} -</b> Intensity: <code><b>{beam * 100:.3e}%</b></code>'
         for (i, beam) in enumerate(k):
-            kernel_outputs[i].value = f'<b>Kernel {i + 1} -</b> Value: <code>{beam:.2e}</code>  KN depth: <code>{beam / np.abs(b) ** 2:.2e}</code>'
+            # Kernel values are differences of intensities; normalize by bright intensity
+            kernel_outputs[i].value = f'<b>Kernel {i + 1} -</b> Value: <code>{beam:.2e}</code>  KN depth: <code>{beam / b:.2e}</code>'
+
         phases.value = ctx.interferometer.chip.plot_output_phase(λ=λ, plot=False, ψ=ψ)
+
+        # Update small images for inputs
         for i in range(len(ψ)):
             plt.imshow([[np.abs(ψ[i]) ** 2]], cmap='hot', vmin=0, vmax=np.sum(np.abs(ψ) ** 2))
             plt.savefig(fname=f'docs/img/tmp.png', format='png')
@@ -94,23 +104,26 @@ Returns
             with open('docs/img/tmp.png', 'rb') as file:
                 image = file.read()
                 photometric_cameras[i].value = image
-        for i in range(len(n) + 1):
-            if i == 0:
-                plt.imshow([[np.abs(b) ** 2]], cmap='hot', vmin=0, vmax=np.sum(np.abs(n) ** 2) + np.abs(b) ** 2)
-            else:
-                plt.imshow([[np.abs(n[i - 1]) ** 2]], cmap='hot', vmin=0, vmax=np.sum(np.abs(n) ** 2) + np.abs(b) ** 2)
-            plt.savefig(fname=f'docs/img/tmp.png', format='png')
-            plt.close()
-            with open('docs/img/tmp.png', 'rb') as file:
-                image = file.read()
-                null_cameras[i].value = image
+
+        # Update images for bright and dark outputs
+        # bright image
+        plt.imshow([[b]], cmap='hot', vmin=0, vmax=np.sum(d) + b)
+        plt.savefig(fname=f'docs/img/tmp.png', format='png')
+        plt.close()
+        with open('docs/img/tmp.png', 'rb') as file:
+            image = file.read()
+            raw_cameras[0].value = image
+
+        # dark images
         for i in range(len(d)):
-            plt.imshow([[np.abs(d[i]) ** 2]], cmap='hot', vmin=0, vmax=np.sum(np.abs(d) ** 2))
+            plt.imshow([[d[i]]], cmap='hot', vmin=0, vmax=np.sum(d))
             plt.savefig(fname=f'docs/img/tmp.png', format='png')
             plt.close()
             with open('docs/img/tmp.png', 'rb') as file:
                 image = file.read()
-                dark_cameras[i].value = image
+                raw_cameras[i + 1].value = image
+
+        # kernel images
         for i in range(len(k)):
             plt.imshow([[k[i]]], cmap='bwr', vmin=-np.max(np.abs(k)), vmax=np.max(np.abs(k)))
             plt.savefig(fname=f'docs/img/tmp.png', format='png')
@@ -118,14 +131,35 @@ Returns
             with open('docs/img/tmp.png', 'rb') as file:
                 image = file.read()
                 kernel_cameras[i].value = image
+
         os.remove('docs/img/tmp.png')
         return (b, d)
     photometric_cameras = [widgets.Image(width=50, height=50) for _ in range(4)]
-    null_cameras = [widgets.Image(width=50, height=50) for _ in range(4)]
+    # raw_cameras: bright + 6 darks
+    raw_cameras = [widgets.Image(width=50, height=50) for _ in range(7)]
     dark_cameras = [widgets.Image(width=50, height=50) for _ in range(6)]
     kernel_cameras = [widgets.Image(width=50, height=50) for _ in range(3)]
     phases = widgets.Image()
-    vbox = widgets.VBox([widgets.HTML('<h1>Inputs</h1>'), widgets.HTML('Amplitude:'), widgets.HBox(IA_sliders[:4]), widgets.HTML('Phase:'), widgets.HBox(IP_sliders[:4]), *[widgets.HBox([photometric_cameras[i], x]) for (i, x) in enumerate(inputs)], widgets.HTML('<h1>Phases</h1>'), phases, widgets.HTML('<h1>Nuller</h1>'), widgets.HBox(P_sliders[:4]), widgets.HBox(P_sliders[4:8]), *[widgets.HBox([null_cameras[i], x]) for (i, x) in enumerate(null_outputs)], widgets.HTML('<h1>Recombiner</h1>'), widgets.HBox(P_sliders[8:11]), widgets.HBox(P_sliders[11:14]), *[widgets.HBox([dark_cameras[i], x]) for (i, x) in enumerate(dark_outputs)], widgets.HTML('<h1>Kernels</h1>'), *[widgets.HBox([kernel_cameras[i], x]) for (i, x) in enumerate(kernel_outputs)]])
+    vbox = widgets.VBox([
+        widgets.HTML('<h1>Inputs</h1>'),
+        widgets.HTML('Amplitude:'),
+        widgets.HBox(IA_sliders[:4]),
+        widgets.HTML('Phase:'),
+        widgets.HBox(IP_sliders[:4]),
+        *[widgets.HBox([photometric_cameras[i], x]) for (i, x) in enumerate(inputs)],
+        widgets.HTML('<h1>Phases</h1>'),
+        phases,
+        widgets.HTML('<h1>Raw outputs (bright + darks)</h1>'),
+        widgets.HBox(P_sliders[:4]),
+        widgets.HBox(P_sliders[4:8]),
+        widgets.HBox([raw_cameras[0], bright_output]),
+        *[widgets.HBox([raw_cameras[i+1], x]) for (i, x) in enumerate(dark_outputs)],
+        widgets.HTML('<h1>Recombiner</h1>'),
+        widgets.HBox(P_sliders[8:11]),
+        widgets.HBox(P_sliders[11:14]),
+        widgets.HTML('<h1>Kernels</h1>'),
+        *[widgets.HBox([kernel_cameras[i], x]) for (i, x) in enumerate(kernel_outputs)]
+    ])
     for widget in P_sliders:
         widget.observe(update_gui, 'value')
     for widget in IA_sliders:

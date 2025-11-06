@@ -34,34 +34,15 @@ def gui(ctx: Context=None, n=10) -> None:
     plot = widgets.Image(width=500, height=500)
 
     def update_plot(*_):
-        """"update_plot.
-
-Parameters
-----------
-(Automatically added placeholder.)
-
-Returns
--------
-(Automatically added placeholder.)
-"""
         ctx = copy(ref_ctx)
         ctx.interferometer.l = l_slider.value * u.deg
         ctx.target.δ = δ_slider.value * u.deg
         plot.value = ctx.plot_projected_positions(N=n, return_image=True)
 
     def reset_values(*_):
-        """"reset_values.
-
-Parameters
-----------
-(Automatically added placeholder.)
-
-Returns
--------
-(Automatically added placeholder.)
-"""
         l_slider.value = ref_ctx.interferometer.l.to(u.deg).value
         δ_slider.value = ref_ctx.target.δ.to(u.deg).value
+    
     reset.on_click(reset_values)
     l_slider.observe(update_plot, 'value')
     δ_slider.observe(update_plot, 'value')

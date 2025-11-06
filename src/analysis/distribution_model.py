@@ -35,7 +35,10 @@ Returns
     print('⌛ Generating data...')
     for i in range(N):
         print(f'{(i + 1) / N * 100:.2f}%', end='\r')
-        (_, k, b) = ctx.observe()
+        # observe returns intensities; process to get kernels
+        outs = ctx.observe()
+        k = ctx.interferometer.chip.process_outputs(outs)
+        b = outs[0]
         data[i] = k / b
     print('✅ Data generation complete.')
     data = data[:, 0]

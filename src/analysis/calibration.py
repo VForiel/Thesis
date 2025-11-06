@@ -101,7 +101,10 @@ Returns
     kernels = np.empty((N, 3))
     bright = np.empty(N)
     for i in range(N):
-        (_, k, b) = ctx.observe()
+        # observe() now returns raw output intensities; process to get kernels
+        outs = ctx.observe()
+        k = ctx.interferometer.chip.process_outputs(outs)
+        b = outs[0]
         kernels[i] = k
         bright[i] = b
     k_mean = np.mean(kernels, axis=0)
@@ -146,10 +149,13 @@ Returns
             ctx.interferometer.chip.σ = np.abs(np.random.normal(0, 1, len(kn.σ))) * λ
             history = ctx.calibrate_gen(β=β, verbose=False)
             ψ = np.ones(4) * (1 + 0j) * np.sqrt(1 / 4)
-            (_, d, b) = ctx.interferometer.chip.get_output_fields(ψ=ψ, λ=λ)
-            di = np.abs(d) ** 2
+            # get_output_fields returns complex fields; square to get intensities
+            out_fields = ctx.interferometer.chip.get_output_fields(ψ=ψ, λ=λ)
+            raw_outs = np.abs(out_fields) ** 2
+            di = raw_outs[1:]
             k = np.array([di[0] - di[1], di[2] - di[3], di[4] - di[5]])
-            depth = np.sum(np.abs(k)) / np.abs(b) ** 2
+            b = raw_outs[0]
+            depth = np.sum(np.abs(k)) / b
             shots.append((len(history['depth']), depth))
     (x, y) = zip(*shots)
     x = np.array(x)
@@ -169,10 +175,12 @@ Returns
             ctx.interferometer.chip.σ = np.abs(np.random.normal(0, 1, len(kn.σ))) * λ
             ctx.calibrate_obs(n=n, plot=False)
             ψ = np.ones(4) * (1 + 0j) * np.sqrt(1 / 4)
-            (_, d, b) = ctx.interferometer.chip.get_output_fields(ψ=ψ, λ=λ)
-            di = np.abs(d) ** 2
+            out_fields = ctx.interferometer.chip.get_output_fields(ψ=ψ, λ=λ)
+            raw_outs = np.abs(out_fields) ** 2
+            di = raw_outs[1:]
             k = np.array([di[0] - di[1], di[2] - di[3], di[4] - di[5]])
-            depth = np.sum(np.abs(k)) / np.abs(b) ** 2
+            b = raw_outs[0]
+            depth = np.sum(np.abs(k)) / b
             shots.append((7 * n, depth))
     (x, y) = zip(*shots)
     x = np.array(x)

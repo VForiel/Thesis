@@ -45,13 +45,17 @@ Returns
         print(f'⌛ Calibrating at {round(λ.value, 3)} um... {round(i / n * 100, 2)}%', end='\r')
         ctx.interferometer.λ = λ
         ctx.calibrate_obs(n=1000)
-        (_, k, b) = ctx.observe()
+        outs = ctx.observe()
+        k = ctx.interferometer.chip.process_outputs(outs)
+        b = outs[0]
         data[i] = np.mean(np.abs(k) / b)
         if λ == λ0:
             data2 = np.empty((n,))
             for (j, λ) in enumerate(λs):
                 ctx.interferometer.λ = λ
-                (_, k, b) = ctx.observe()
+                outs = ctx.observe()
+                k = ctx.interferometer.chip.process_outputs(outs)
+                b = outs[0]
                 data2[j] = np.mean(np.abs(k) / b)
             plt.plot(λs.to(u.nm).value, data2, color='gray', alpha=0.3, label='$\\lambda_{cal} = \\lambda_0$')
     print(f"✅ Done.{' ' * 30}")
