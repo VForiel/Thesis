@@ -22,7 +22,7 @@ class Interferometer:
         camera (Camera): Associated camera.
         name (str, optional): Instrument name.
     """
-    __slots__ = ('_parent_ctx', '_l', '_λ', '_Δλ', '_fov', '_η', '_telescopes', '_chip', '_camera', '_name')
+    __slots__ = ('_parent_ctx', '_l', '_l_unit', '_λ', '_λ_unit', '_Δλ', '_Δλ_unit', '_fov', '_fov_unit', '_η', '_telescopes', '_chip', '_camera', '_name')
 
     def __init__(self, l: u.Quantity, λ: u.Quantity, Δλ: u.Quantity, fov: u.Quantity, η: float, telescopes: list[Telescope], chip: Chip, camera: Camera, name: str='Unnamed Interferometer'):
         self._parent_ctx = None
@@ -60,145 +60,86 @@ class Interferometer:
 
     @property
     def l(self) -> u.Quantity:
-        """Array latitude (degrees).
-
-        Returns:
-            u.Quantity: Latitude in degrees. Updating this triggers projected
-                telescope positions recomputation when a parent context exists.
+        """Latitude of the center of the telescope array.
         """
-        return self._l
+        return (self._l * u.deg).to(self._l_unit)
 
     @l.setter
     def l(self, l: u.Quantity):
-        """Set array latitude.
-
-        Args:
-            l (u.Quantity): Latitude in a convertible angular unit.
-
-        Raises:
-            TypeError: If not an ``astropy.units.Quantity``.
-            ValueError: If not convertible to degrees.
-        """
         if not isinstance(l, u.Quantity):
             raise TypeError('l must be an astropy Quantity')
         try:
-            l = l.to(u.deg)
+            new_l = l.to(u.deg).value
         except u.UnitConversionError:
             raise ValueError('l must be in degrees')
-        self._l = l
+        self._l = new_l
+        self._l_unit = l.unit
         if self.parent_ctx is not None:
             self.parent_ctx._update_p()
 
     @property
     def λ(self) -> u.Quantity:
-        """Central wavelength (nm).
-
-        Returns:
-            u.Quantity: Central wavelength in nm. Updating triggers the
-                context photon flux recomputation when a parent context exists.
+        """Central wavelength
         """
-        return self._λ
+        return (self._λ * u.nm).to(self._λ_unit)
 
     @λ.setter
     def λ(self, λ: u.Quantity):
-        """Set central wavelength.
-
-        Args:
-            λ (u.Quantity): Wavelength in a convertible unit.
-
-        Raises:
-            TypeError: If not an ``astropy.units.Quantity``.
-            ValueError: If not convertible to nanometers.
-        """
         if not isinstance(λ, u.Quantity):
             raise TypeError('λ must be an astropy Quantity')
         try:
-            λ = λ.to(u.nm)
+            new_λ = λ.to(u.nm).value
         except u.UnitConversionError:
             raise ValueError('λ must be in nanometers')
-        self._λ = λ
+        self._λ = new_λ
+        self._λ_unit = λ.unit
         if self.parent_ctx is not None:
             self.parent_ctx._update_pf()
 
     @property
     def Δλ(self) -> u.Quantity:
-        """Bandwidth (nm).
-
-        Returns:
-            u.Quantity: Positive bandwidth expressed in nanometers.
+        """Bandwidth
         """
-        return self._Δλ
+        return (self._Δλ * u.nm).to(self._Δλ_unit)
 
     @Δλ.setter
     def Δλ(self, Δλ: u.Quantity):
-        """Set bandwidth.
-
-        Args:
-            Δλ (u.Quantity): Bandwidth in a convertible unit.
-
-        Raises:
-            TypeError: If not an ``astropy.units.Quantity``.
-            ValueError: If not convertible to nanometers or non-positive.
-        """
         if not isinstance(Δλ, u.Quantity):
             raise TypeError('Δλ must be an astropy Quantity')
         try:
-            Δλ = Δλ.to(u.nm)
+            new_Δλ = Δλ.to(u.nm).value
         except u.UnitConversionError:
             raise ValueError('Δλ must be in nanometers')
-        if Δλ <= 0 * u.nm:
+        if new_Δλ <= 0:
             raise ValueError('Δλ must be positive')
         if self.parent_ctx is not None:
             self.parent_ctx._update_pf()
-        self._Δλ = Δλ
+        self._Δλ = new_Δλ
+        self._Δλ_unit = Δλ.unit
 
     @property
     def fov(self) -> u.Quantity:
-        """Field of view (typically in mas).
-
-        Returns:
-            u.Quantity: Field of view in milliarcseconds.
-        """
-        return self._fov
+        """Field of view"""
+        return (self._fov * u.mas).to(self._fov_unit)
 
     @fov.setter
     def fov(self, fov: u.Quantity):
-        """Set field of view.
-
-        Args:
-            fov (u.Quantity): FOV in a convertible angular unit.
-
-        Raises:
-            TypeError: If not an ``astropy.units.Quantity``.
-            ValueError: If not convertible to milliarcseconds.
-        """
         if not isinstance(fov, u.Quantity):
             raise TypeError('fov must be an astropy Quantity')
         try:
-            fov = fov.to(u.mas)
+            new_fov = fov.to(u.mas).value
         except u.UnitConversionError:
             raise ValueError('fov must be in milliarcseconds')
-        self._fov = fov
+        self._fov = new_fov
+        self._fov_unit = fov.unit
 
     @property
     def telescopes(self) -> list[Telescope]:
-        """List of `Telescope` objects constituting the array.
-
-        Returns:
-            list[Telescope]: Managed list of telescopes.
-        """
+        """List of `Telescope` objects constituting the array"""
         return self._telescopes
 
     @telescopes.setter
     def telescopes(self, telescopes: list[Telescope]):
-        """Set telescopes.
-
-        Args:
-            telescopes (list[Telescope]): List of telescope objects.
-
-        Raises:
-            TypeError: If not a list of ``Telescope`` instances.
-        """
         if not isinstance(telescopes, list):
             raise TypeError('telescopes must be a list')
         if not all((isinstance(telescope, Telescope) for telescope in telescopes)):
@@ -209,23 +150,11 @@ class Interferometer:
 
     @property
     def chip(self) -> Chip:
-        """Associated `Chip` instance.
-
-        Returns:
-            Chip: Photonic Chip configuration.
-        """
+        """Associated `Chip` instance"""
         return self._chip
 
     @chip.setter
     def chip(self, chip: Chip):
-        """Set kernel nuller.
-
-        Args:
-            chip (SuperKN): Kernel nuller object.
-
-        Raises:
-            TypeError: If not a ``Chip`` instance.
-        """
         if not isinstance(chip, Chip):
             raise TypeError('chip must be a Chip object')
         self._chip = copy(chip)
@@ -233,23 +162,11 @@ class Interferometer:
 
     @property
     def camera(self) -> Camera:
-        """Associated `Camera` object.
-
-        Returns:
-            Camera: Camera instance.
-        """
+        """Associated `Camera` object"""
         return self._camera
 
     @camera.setter
     def camera(self, camera: Camera):
-        """Set camera.
-
-        Args:
-            camera (Camera): Camera object.
-
-        Raises:
-            TypeError: If not a ``Camera`` instance.
-        """
         if not isinstance(camera, Camera):
             raise TypeError('camera must be a Camera object')
         self._camera = copy(camera)
@@ -257,43 +174,22 @@ class Interferometer:
 
     @property
     def name(self) -> str:
-        """Interferometer name.
-
-        Returns:
-            str: Name of the instrument.
-        """
+        """Interferometer name"""
         return self._name
 
     @name.setter
     def name(self, name: str):
-        """Set instrument name.
-
-        Args:
-            name (str): Readable name.
-
-        Raises:
-            TypeError: If not a string.
-        """
         if not isinstance(name, str):
             raise TypeError('name must be a string')
         self._name = name
 
     @property
     def parent_ctx(self) -> list:
-        """Parent observing context (read-only).
-
-        Returns:
-            Any: Parent context reference or ``None``.
-        """
+        """Parent observing context (read-only)"""
         return self._parent_ctx
 
     @parent_ctx.setter
     def parent_ctx(self, parent_ctx):
-        """Setter is disabled; ``parent_ctx`` is read-only.
-
-        Raises:
-            AttributeError: If attempting to overwrite an existing parent.
-        """
         if self._parent_ctx is not None:
             raise AttributeError('parent_ctx is read-only')
         else:
@@ -301,23 +197,11 @@ class Interferometer:
 
     @property
     def η(self) -> u.Quantity:
-        """Global optical efficiency.
-
-        Returns:
-            float: Efficiency factor in [0, +inf).
-        """
+        """Global optical efficiency"""
         return self._η
 
     @η.setter
     def η(self, η: float):
-        """Set optical efficiency.
-
-        Args:
-            η (float): Efficiency factor.
-
-        Raises:
-            ValueError: If not convertible to float or negative.
-        """
         try:
             η = float(η)
         except (ValueError, TypeError):

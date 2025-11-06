@@ -1,5 +1,6 @@
 import astropy.units as u
 from copy import deepcopy as copy
+from typing import Union
 from .companion import Companion
 
 class CompanionList(list):
@@ -86,7 +87,7 @@ class Target:
     """
     __slots__ = ('_parent_ctx', '_f', '_f_unit', '_δ', '_δ_unit', '_companions', '_name')
 
-    def __init__(self, f: u.Quantity, δ: u.Quantity, companions: list[Companion] | CompanionList, name: str='Unnamed Target'):
+    def __init__(self, f: u.Quantity, δ: u.Quantity, companions: Union[list[Companion], CompanionList], name: str='Unnamed Target'):
         self._parent_ctx = None
         self.f = f
         self.δ = δ

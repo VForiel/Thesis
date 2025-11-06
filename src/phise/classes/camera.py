@@ -165,7 +165,13 @@ class Camera:
             - For reproducibility, seed the RNG before calling (e.g.
               ``np.random.seed(...)``).
         """
-        return acquire_jit(ψ, self._e, ideal=self._ideal)
+        # Some build environments wrap the jit function in a staticmethod
+        # object; ensure we call the underlying callable if needed.
+        try:
+            return acquire_jit(ψ, self._e, ideal=self._ideal)
+        except TypeError:
+            # fallback: staticmethod object -> call its __func__
+            return acquire_jit.__func__(ψ, self._e, ideal=self._ideal)
 
 @staticmethod
 @nb.njit()

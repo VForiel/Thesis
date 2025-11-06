@@ -32,6 +32,8 @@ def instant_distribution(ctx: Context=None, n=10000, stat=np.median, figsize=(10
     np.ndarray
         The instantaneous distribution of the kernel nuller.
     """
+
+    # Set up context
     if ctx is None:
         ctx = Context.get_VLTI()
         ctx.interferometer.chip.σ = np.zeros(14) * u.um
@@ -41,10 +43,15 @@ def instant_distribution(ctx: Context=None, n=10000, stat=np.median, figsize=(10
         if ctx.target.companions == []:
             raise ValueError('No companion in the context. Please add a companion to the target.')
     ctx.Δh = ctx.interferometer.camera.e.to(u.hour).value * u.hourangle
+
     ref_ctx = copy(ctx)
     ref_ctx.target.companions = []
+
+    # Prepare data arrays
     data = np.empty((n, 3))
     ref_data = np.empty((n, 3))
+
+    # Sample data
     for i in range(n):
         # observe() returns raw intensities; process to get kernels
         outs = ctx.observe()
@@ -55,6 +62,8 @@ def instant_distribution(ctx: Context=None, n=10000, stat=np.median, figsize=(10
         k_ref = ref_ctx.interferometer.chip.process_outputs(outs_ref)
         b_ref = outs_ref[0]
         ref_data[i] = k_ref / b_ref
+
+    # Plot histograms
     (_, axs) = plt.subplots(3, 1, figsize=figsize, sharex=True, constrained_layout=True)
     kmin_k = np.zeros(3)
     kmax_k = np.zeros(3)
