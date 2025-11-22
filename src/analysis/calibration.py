@@ -16,24 +16,18 @@ def genetic_approach(ctx: Context=None, β: float=0.9, verbose=False, figsize=(1
         ctx = copy(ctx)
     ctx.Γ = 0 * u.nm
     ctx.target.companions = []
-    if σ_rms is None:
-        σ_rms = ctx.interferometer.λ
-    ctx.interferometer.chip.σ = np.abs(np.random.normal(0, 10, 14)) * σ_rms
     print_kernel_null_depth_lab_space_atm(ctx)
     ctx.calibrate_gen(β=β, plot=True, verbose=verbose, figsize=figsize)
     print_kernel_null_depth_lab_space_atm(ctx)
     return ctx
 
-def obstruction_approach(ctx: Context=None, n: int=1000, σ_rms=None, figsize=(10, 10)):
+def obstruction_approach(ctx: Context=None, n: int=1000, figsize=(10, 10)):
     if ctx is None:
         ctx = Context.get_VLTI()
     else:
         ctx = copy(ctx)
     ctx.Γ = 0 * u.nm
     ctx.target.companions = []
-    if σ_rms is None:
-        σ_rms = ctx.interferometer.λ
-    ctx.interferometer.chip.σ = np.abs(np.random.normal(0, 10, 14)) * σ_rms
     print_kernel_null_depth_lab_space_atm(ctx)
     ctx.calibrate_obs(n=n, plot=True, figsize=(10, 10))
     print_kernel_null_depth_lab_space_atm(ctx)

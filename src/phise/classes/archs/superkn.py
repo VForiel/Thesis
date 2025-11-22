@@ -523,7 +523,7 @@ def get_output_fields_jit(
 
     # Splitters and final bright output
     ψb = ψ2[0]
-    ψ3 = ψ2[1:].repeat(2) * 1 / np.sqrt(2) 
+    ψ3 = ψ2[1:].repeat(2) / np.sqrt(2) 
 
     # Final perturbations & shifts
     ψ3 = phase.shift_jit(ψ3, φ[8:], λ)

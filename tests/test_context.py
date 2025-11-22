@@ -14,6 +14,7 @@ import astropy.units as u
 import pytest
 
 from phise.classes.context import Context
+from phise import context
 
 
 def test_factory_creates_context():
@@ -126,6 +127,16 @@ def test_get_input_fields_shape_and_dtype():
     assert isinstance(fields, np.ndarray)
     assert fields.dtype == np.complex128
     assert fields.shape == (nb_objects, nb_tel)
+
+    fields = context.get_unique_source_input_fields_jit(
+        a=(np.array([1,2,3,4])/u.s).value, #photons/s
+        ρ=(2*u.mas).to(u.rad).value,
+        θ=(45*u.deg).to(u.rad).value,
+        λ=(1.55*u.um).to(u.m).value,
+        p=(np.array([[0,0],[10,0],[0,10],[10,10]])*u.m).value
+    )
+
+    print(fields)
 
 
 def test_get_h_range_properties():

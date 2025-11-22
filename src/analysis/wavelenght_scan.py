@@ -16,18 +16,12 @@ from scipy import stats
 from phise.classes.context import Context
 
 def run(ctx: Context=None, Δλ=0.2 * u.um, n=11, figsize=(5, 5)):
-    """"run.
 
-Parameters
-----------
-(Automatically added placeholder.)
-
-Returns
--------
-(Automatically added placeholder.)
-"""
+    # Ensure n is odd (centered on λ0)
     if n % 2 == 0:
         n += 1
+
+    # Build context
     if ctx is None:
         ctx = Context.get_VLTI()
         ctx.interferometer.chip.σ = np.zeros(14) * u.m
@@ -36,11 +30,16 @@ Returns
         ctx.monochromatic = True
     else:
         ctx = copy(ctx)
-    λ0 = ctx.interferometer.λ.to(u.um)
+        ctx.Γ = 0 * u.nm
+        ctx.target.companions = []
+
+    
+    λ0 = ctx.interferometer.chip.λ0.to(u.um)
     λs = np.linspace(λ0.value - Δλ.value / 2, λ0.value + Δλ.value / 2, n) * u.um
     data = np.empty((n,))
     plt.figure(figsize=figsize)
     plt.axvline(λ0.to(u.nm).value, color='k', ls='--', label='$\\lambda_0$')
+
     for (i, λ) in enumerate(λs):
         print(f'⌛ Calibrating at {round(λ.value, 3)} um... {round(i / n * 100, 2)}%', end='\r')
         ctx.interferometer.λ = λ

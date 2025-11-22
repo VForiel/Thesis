@@ -39,7 +39,7 @@ def plot(ctx: Context=None, β=0.5, n=1000, γ=10*u.nm, figsize=(15, 5)):
         ctx_perturbated.monochromatic = True
     else:
         ctx_perturbated = copy(ctx)
-    ctx_perturbated.name = f'${γ:.0f}$ intrinsic OPD RMS'
+    ctx_perturbated.name = f'${γ:.0f}$ intrinsic piston RMS'
     ctx_perturbated.Δh = ctx_perturbated.interferometer.camera.e.to(u.hour).value * u.hourangle
     ctx_perturbated.target.companions = []
     ctx_perturbated.interferometer.chip.σ = np.random.normal(0, γ.to(u.nm).value, 14) * u.nm
@@ -95,7 +95,7 @@ def plot(ctx: Context=None, β=0.5, n=1000, γ=10*u.nm, figsize=(15, 5)):
             ax.boxplot(data, vert=True, positions=[Γ.value + (c - 1.5) * step.value / 5], widths=step.value / 5, showfliers=False, manage_ticks=False)
     print('✅ Done.                      ')
     ax.set_ylim(-max(stds), max(stds))
-    ax.set_xlabel(f'Upstream OPD RMS ({Γ_range.unit})')
+    ax.set_xlabel(f'Upstream piston RMS ({Γ_range.unit})')
     ax.set_ylabel('Kernel-Null depth')
     ax.set_title('Sensitivity to noise')
     ax.legend()

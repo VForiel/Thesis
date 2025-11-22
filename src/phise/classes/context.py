@@ -17,6 +17,7 @@ except Exception:
     plt = None
 from io import BytesIO
 from scipy.optimize import curve_fit
+import scipy
 
 # Internal libs
 from .interferometer import Interferometer
@@ -171,7 +172,7 @@ class Context:
     @property
     def Γ(self) -> u.Quantity:
         """
-        RMS cophasing error (in length units) of the observation.
+        Upstream piston RMS (in length units) during the observation.
         """
         return (self._Γ * u.m).to(self._Γ_unit)
     
@@ -414,7 +415,7 @@ class Context:
             if i >= nb_processed_outs:
                 axs[1, i].axis('off')
             else:
-                im = axs[1, i].imshow(processed_out_maps[i], aspect="equal", cmap="PiYG" if not grad else "gray", extent=extent)
+                im = axs[1, i].imshow(processed_out_maps[i], aspect="equal", cmap="bwr" if not grad else "gray", extent=extent)
                 axs[1, i].set_title(self.interferometer.chip._processed_output_labels[i])
                 axs[1, i].set_aspect("equal")
                 plt.colorbar(im, ax=axs[1, i])
@@ -498,11 +499,11 @@ class Context:
 
     # Observation -------------------------------------------------------------
 
-    def observe_monochromatic(self, static_input_opd:u.Quantity=None):
+    def observe_monochromatic(self, opd_error:u.Quantity=None):
         """Observe the target with monochromatic approximation.
 
         Args:
-            static_input_opd (Optional[u.Quantity]): If provided, use this static
+            opd_error (Optional[u.Quantity]): If provided, use this static
                 OPD error instead of random atmospheric piston. Shape: (n_telescopes,)
         Returns:
             np.ndarray[float]: Output intensities (photon events).
@@ -515,10 +516,10 @@ class Context:
         ψi = self.get_input_fields()
 
         # Get input OPD (atmospheric piston) for each telescope
-        if static_input_opd is None:
+        if opd_error is None:
             Δφ = np.random.normal(0, self.Γ.to(u.nm).value, size=len(self.interferometer.telescopes))
         else:
-            Δφ = static_input_opd.to(u.nm).value
+            Δφ = opd_error.to(u.nm).value
         λ = self.interferometer.λ.to(u.nm).value
 
         # Add the OPD error to the input fields
@@ -537,11 +538,13 @@ class Context:
 
         return outs
     
-    def observe(self, spectral_samples=5):
+    def observe(self, spectral_samples=5, opd_error:u.Quantity=None):
         """Observe the target in this context.
 
         Args:
             spectral_samples (int): Number of spectral samples to acquire (default: 5).
+            opd_error (Optional[u.Quantity]): If provided, use this static
+                OPD error instead of random atmospheric piston. Shape: (n_telescopes,)
 
         Returns:
             np.ndarray[float]: Output intensities (photon events).
@@ -549,7 +552,7 @@ class Context:
 
         # If this context use monochromatic approximation
         if self.monochromatic:
-            return self.observe_monochromatic()
+            return self.observe_monochromatic(opd_error=opd_error)
 
         # Sampling bandwidth
         λ_range = np.linspace(self.interferometer.λ - self.interferometer.Δλ/2, self.interferometer.λ + self.interferometer.Δλ/2, spectral_samples)
@@ -559,7 +562,10 @@ class Context:
         outs = np.empty((spectral_samples, nb_outs))
 
         # Atmospheric piston for each telescope
-        Δφ = np.random.normal(0, self.Γ.value, size=len(self.interferometer.telescopes)) * self.Γ.unit
+        if opd_error is None:
+            Δφ = np.random.normal(0, self.Γ.value, size=len(self.interferometer.telescopes)) * self.Γ.unit
+        else:
+            Δφ = opd_error
 
         # Monochromatic approximation for each sub-band
         for i, λ in enumerate(λ_range):
@@ -567,7 +573,7 @@ class Context:
             ctx_mono.interferometer.λ = λ
             ctx_mono.interferometer.Δλ = 1 * u.nm
 
-            outs[i] = ctx_mono.observe_monochromatic(static_input_opd=Δφ)
+            outs[i] = ctx_mono.observe_monochromatic(opd_error=Δφ)
 
         # Integrate over the bandwidth
         return np.trapz(outs, λ_range.value, axis=0)
@@ -769,7 +775,7 @@ class Context:
             y = np.empty(n)
 
             if isinstance(p,list):
-                Δp = chip.φ[p[1]-1] - chip.φ[p[0]-1]
+                Δp = (chip.φ[p[1]-1] - chip.φ[p[0]-1]) % λ
 
             for i in range(n):
 
@@ -785,7 +791,8 @@ class Context:
             def sin(x, x0):
                 return (np.sin((x-x0)/λ.value*2*np.pi)+1)/2 * (np.max(y)-np.min(y)) + np.min(y)
             
-            popt, _ = curve_fit(sin, x, y, p0=[0], maxfev = 100_000)
+            # Fit sin using scipy.optimize.minimize
+            popt = scipy.optimize.minimize(lambda x0: np.sum((y - sin(x, x0))**2), x0=[0], method='Nelder-Mead').x
 
             if isinstance(p,list):
                 chip.φ[p[0]-1] = (np.mod(popt[0]+λ.value/4, λ.value) * λ.unit).to(chip.φ.unit)
@@ -816,7 +823,8 @@ class Context:
             def sin(x, x0):
                 return (np.sin((x-x0)/λ.value*2*np.pi)+1)/2 * (np.max(y)-np.min(y)) + np.min(y)
             
-            popt, _ = curve_fit(sin, x, y, p0=[0], maxfev = 100_000)
+            # Fit sin using scipy.optimize.minimize
+            popt = scipy.optimize.minimize(lambda x0: np.sum((y - sin(x, x0))**2), x0=[0], method='Nelder-Mead').x
 
             chip.φ[p-1] = (np.mod(popt[0], λ.value) * λ.unit).to(chip.φ.unit)
 
@@ -848,7 +856,8 @@ class Context:
             def sin(x, x0):
                 return (np.sin((x-x0)/λ.value*2*np.pi)+1)/2 * (np.max(y)-np.min(y)) + np.min(y)
             
-            popt, _ = curve_fit(sin, x, y, p0=[0], maxfev = 100_000)
+            # Fit sin using scipy.optimize.minimize
+            popt = scipy.optimize.minimize(lambda x0: np.sum((y - sin(x, x0))**2), x0=[0], method='Nelder-Mead').x
 
             # Update phase shift
             chip.φ[p-1] = (np.mod(popt[0]+λ.value/4, λ.value) * λ.unit).to(chip.φ.unit)
@@ -866,15 +875,12 @@ class Context:
         # Bright maximization
         self.interferometer.chip.input_attenuation = [1, 1, 0, 0]
         maximize_bright(2, plt_coords=(0,0))
-        # maximize_bright([1,2], plt_coords=(3,0))
 
         self.interferometer.chip.input_attenuation = [0, 0, 1, 1]
         maximize_bright(4, plt_coords=(0,1))
-        # maximize_bright([3,4], plt_coords=(3,1))
 
         self.interferometer.chip.input_attenuation = [1, 0, 1, 0]
         maximize_bright(7, plt_coords=(0,2))
-        # maximize_bright([5,7], plt_coords=(3,2))
 
         # Darks maximization
         self.interferometer.chip.input_attenuation = [1, 0, 0, -1]
@@ -885,6 +891,16 @@ class Context:
         minimize_kernel(11, 1, plt_coords=(2,0))
         minimize_kernel(13, 2, plt_coords=(2,1))
         minimize_kernel(14, 3, plt_coords=(2,2))
+
+        # Find global minimum
+        if not self.monochromatic:
+            # Bright maximization
+            self.interferometer.chip.input_attenuation = [1, 1, 0, 0]
+            maximize_bright([1,2], plt_coords=(3,0))
+            self.interferometer.chip.input_attenuation = [0, 0, 1, 1]
+            maximize_bright([3,4], plt_coords=(3,1))
+            self.interferometer.chip.input_attenuation = [1, 0, 1, 0]
+            maximize_bright([5,7], plt_coords=(3,2))
 
         chip.φ = phase.bound(chip.φ, λ)
         chip.input_attenuation = input_attenuation_backup
@@ -918,14 +934,14 @@ class Context:
             interferometer = Interferometer(
                 l = -24.6275 * u.deg, # Latitude
                 λ = λ, # Central wavelength
-                Δλ = 1 * u.nm, # Bandwidth
+                Δλ = 0.1 * u.um, # Bandwidth
                 fov = 10 * u.mas, # Field of view
                 η = 0.02, # Optical efficiency
                 telescopes = telescope.get_VLTI_UTs(),
                 name = "VLTI", # Interferometer name
                 chip = SuperKN(
-                    φ = np.zeros(14) * u.um, # Injected phase shifts
-                    σ = np.abs(np.random.normal(0, 1, 14)) * u.um, # Manufacturing OPD errors
+                    φ = np.zeros(14) * u.nm, # Injected phase shifts
+                    σ = np.abs(np.random.normal(0, 10, 14)) * u.nm, # Manufacturing OPD errors
                     λ0 = λ,
                     name = "First Generation Kernel-Nuller", # Kernel nuller name
                 ),
@@ -964,20 +980,21 @@ class Context:
             - Vega as target star and a hypothetical 2 mas, 1e-6 contrast companion
         """
 
-        λ = 4 * u.um # Central wavelength
+        # LIFE range: 4 to 18 μm
+        λ = 1.55 * u.um # Central wavelength
 
         ctx = Context(
             interferometer = Interferometer(
                 l = -90 * u.deg, # Latitude
                 λ = λ, # Central wavelength
-                Δλ = 1 * u.nm, # Bandwidth
+                Δλ = 0.1 * u.um, # Bandwidth
                 fov = 10 * u.mas, # Field of view
                 η = 0.02, # Optical efficiency
-                telescopes = telescope.get_VLTI_UTs(),
+                telescopes = telescope.get_LIFE_telescopes(),
                 name = "LIFE", # Interferometer name
                 chip = SuperKN(
-                    φ = np.zeros(14) * u.um, # Injected phase shifts
-                    σ = np.abs(np.random.normal(0, 1, 14)) * u.um, # Manufacturing OPD errors
+                    φ = np.zeros(14) * u.nm, # Injected phase shifts
+                    σ = np.abs(np.random.normal(0, 10, 14)) * u.nm, # Manufacturing OPD errors
                     λ0 = λ,
                     name = "First Generation Kernel-Nuller", # Kernel nuller name
                 ),
@@ -1126,11 +1143,11 @@ def get_unique_source_input_fields_jit(
 
     Parameters
     ----------
-    - a: Intensity of the signal on each telescope (in #photons/s)
-    - ρ: Angular separation (in radian)
-    - θ: Parallactic angle (in radian)
-    - λ: Wavelength (in meter)
-    - p: Projected telescope positions (in meter)
+    - a: Intensity of the signal on each telescope (n_telescopes,) [#photons/s]
+    - ρ: Angular separation [rad]
+    - θ: Parallactic angle [rad]
+    - λ: Wavelength [meter]
+    - p: Projected telescope positions (n_telescopes,2) [meter]
 
     Returns
     -------
@@ -1151,4 +1168,4 @@ def get_unique_source_input_fields_jit(
         # Build the complex amplitude of the signal
         s[i] = np.exp(1j * Φ)
 
-    return s * np.sqrt(a)
+    return s * np.sqrt(a/len(p))

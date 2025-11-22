@@ -11,6 +11,7 @@ from scipy import stats
 from phise import Context
 from phise.modules.test_statistics import ALL_TESTS
 import phise.modules.test_statistics as ts
+import scipy.special
 
 def roc(t0: np.ndarray, t1: np.ndarray, test: callable):
     t0_stats = np.array([test(t0[i], t0[i + 1]) if i + 1 < t0.shape[0] else test(t0[i], t0[0]) for i in range(t0.shape[0])])
@@ -125,6 +126,25 @@ def plot_p_values(t0, t1, tests=ALL_TESTS):
         axs[t].legend()
     plt.show()
 
+#==============================================================================
+# Benchmark
+#==============================================================================
+
+# Specific models definition ----------------------------------------------
+
+def imb(z, μ, σ, ν):
+    # Felix Dannert et al. 2025
+
+    ν=0.8
+
+    v = (ν - 1)/2
+    a = 2**((1-ν)/2) * np.sqrt(ν)
+    b = σ * np.sqrt(np.pi) * scipy.special.gamma(ν/2)
+    c = np.abs((z-μ) / (σ * np.sqrt(ν)))
+    k = scipy.special.kv(v, c)
+
+    return (a / b) * c**v * k
+
 def np_benchmark(ctx: Context=None):
 
     # Build H1 context
@@ -140,9 +160,10 @@ def np_benchmark(ctx: Context=None):
     ctx_star_only = copy(ctx)
     ctx_star_only.target.companions = []
 
-    # Generate reference distribution using the numerical model
+    # Generate reference distribution using the numerical model ---------------
+
     print('⌛ Generating distributions...')
-    samples = 100_000
+    samples = 10_000
     bins = np.sqrt(samples).astype(int)
     h0_data_kn = np.empty(samples)
     h1_data_kn = np.empty(samples)
@@ -156,7 +177,21 @@ def np_benchmark(ctx: Context=None):
         h1_data_kn[i] = ker_h1[0]
     print('✅ Distributions generated.')
 
-    # Fit distributions
+    # Cost function for imb fit -----------------------------------------------
+
+    def imb_cost(params, data):
+        μ, σ, ν = params
+        pdf_vals = imb(data, μ, σ, ν)
+        pdf_vals /= np.trapz(pdf_vals, data)
+        hist_vals, bin_edges = np.histogram(data, bins=bins, density=True)
+        bin_centers = (bin_edges[:-1] + bin_edges[1:]) / 2
+        model_vals = imb(bin_centers, μ, σ, ν)
+        model_vals /= np.trapz(model_vals, bin_centers)
+        cost = np.sum((hist_vals - model_vals) ** 2)
+        return cost
+
+    # Fit distributions -------------------------------------------------------
+
     (x0, γ0) = stats.cauchy.fit(h0_data_kn)
     (x1, γ1) = stats.cauchy.fit(h1_data_kn)
     (μ0, b0) = stats.laplace.fit(h0_data_kn)
@@ -165,6 +200,14 @@ def np_benchmark(ctx: Context=None):
     # (β1, m1, s1) = stats.gennorm.fit(h1_data_kn)
     kde_h0 = stats.gaussian_kde(h0_data_kn)
     kde_h1 = stats.gaussian_kde(h1_data_kn)
+    # imb fit for h0
+    initial_guess_h0 = [np.median(h0_data_kn), np.std(h0_data_kn), 0.8]
+    result_h0 = minimize(imb_cost, initial_guess_h0, args=(h0_data_kn,), bounds=[(None, None), (1e-5, None), (2.1, None)])
+    μ_imb0, σ_imb0, ν_imb0 = result_h0.x
+    # imb fit for h1
+    initial_guess_h1 = [np.median(h1_data_kn), np.std(h1_data_kn), 0.8]
+    result_h1 = minimize(imb_cost, initial_guess_h1, args=(h1_data_kn,), bounds=[(None, None), (1e-5, None), (2.1, None)])
+    μ_imb1, σ_imb1, ν_imb1 = result_h1.x
 
     # Init plot
     x = np.linspace(min(np.min(h0_data_kn), np.min(h1_data_kn)), max(np.max(h0_data_kn), np.max(h1_data_kn)), 1000)
@@ -177,14 +220,16 @@ def np_benchmark(ctx: Context=None):
     # Fitted distributions
     plt.plot(x, stats.cauchy.pdf(x, loc=x0, scale=γ0), 'b--', label='h0 cauchy fit', linewidth=2)
     plt.plot(x, stats.cauchy.pdf(x, loc=x1, scale=γ1), 'r--', label='h1 cauchy fit', linewidth=2)
-    plt.plot(x, stats.laplace.pdf(x, loc=μ0, scale=b0), 'b:', label='h0 laplace fit', linewidth=2)
-    plt.plot(x, stats.laplace.pdf(x, loc=μ1, scale=b1), 'r:', label='h1 laplace fit', linewidth=2)
+    # plt.plot(x, stats.laplace.pdf(x, loc=μ0, scale=b0), 'b:', label='h0 laplace fit', linewidth=2)
+    # plt.plot(x, stats.laplace.pdf(x, loc=μ1, scale=b1), 'r:', label='h1 laplace fit', linewidth=2)
     # plt.plot(x, stats.gennorm.pdf(x, β0, m0, s0), 'b-.', label='h0 gennorm fit', linewidth=2)
     # plt.plot(x, stats.gennorm.pdf(x, β1, m1, s1), 'r-.', label='h1 gennorm fit', linewidth=2)
     # plt.plot(x, 0.5 * stats.cauchy.pdf(x, loc=x0, scale=γ0) + 0.5 * stats.laplace.pdf(x, loc=μ0, scale=b0), 'b.', label='h0 mix fit', linewidth=2)
     # plt.plot(x, 0.5 * stats.cauchy.pdf(x, loc=x1, scale=γ1) + 0.5 * stats.laplace.pdf(x, loc=μ1, scale=b1), 'r.', label='h1 mix fit', linewidth=2)
-    plt.plot(x, kde_h0(x), 'b-', label='h0 KDE', linewidth=2)
-    plt.plot(x, kde_h1(x), 'r-', label='h1 KDE', linewidth=2)
+    # plt.plot(x, kde_h0(x), 'b-', label='h0 KDE', linewidth=2)
+    # plt.plot(x, kde_h1(x), 'r-', label='h1 KDE', linewidth=2)
+    plt.plot(x, imb(x, μ_imb0, σ_imb0, ν_imb0), 'b-.', label='h0 IMB fit', linewidth=2)
+    plt.plot(x, imb(x, μ_imb1, σ_imb1, ν_imb1), 'r-.', label='h1 IMB fit', linewidth=2)
     
     # Finalize plot
     plt.xlabel('Test Statistic Value')
@@ -195,7 +240,7 @@ def np_benchmark(ctx: Context=None):
 
     # Generate random distributions from the fitted models
     print('⌛ Generating random distributions from the fitted models...')
-    nmc = 1000
+    nmc = 100
     samples = 1000
     t0_sim = np.empty((nmc, samples))
     t1_sim = np.empty((nmc, samples))
@@ -205,6 +250,8 @@ def np_benchmark(ctx: Context=None):
     t1_laplace = np.empty((nmc, samples))
     t0_gennorm = np.empty((nmc, samples))
     t1_gennorm = np.empty((nmc, samples))
+    t0_imb = np.empty((nmc, samples))
+    t1_imb = np.empty((nmc, samples))
     for i in range(nmc):
         print(f'{(i + 1) / nmc * 100:.2f}% ({i + 1}/{nmc})', end='\r')
         t0_cauchy[i] = stats.cauchy.rvs(loc=x0, scale=γ0, size=samples)
@@ -220,6 +267,29 @@ def np_benchmark(ctx: Context=None):
             outs1 = ctx.observe()
             k1 = ctx.interferometer.chip.process_outputs(outs1)
             t1_sim[i, j] = k1[0]
+
+            # random in imb distribution
+            def sample_imb_random(mu, sigma, nu, x_min=None, x_max=None, n_grid=2000):
+                # Build sampling grid from empirical ranges if not provided
+                if x_min is None:
+                    x_min = min(np.min(h0_data_kn), np.min(h1_data_kn))
+                if x_max is None:
+                    x_max = max(np.max(h0_data_kn), np.max(h1_data_kn))
+                x = np.linspace(x_min, x_max, n_grid)
+                pdf = imb(x, mu, sigma, nu)
+                pdf = np.clip(pdf, 0.0, None)
+                dx = x[1] - x[0]
+                cdf = np.cumsum(pdf) * dx
+                if not np.isfinite(cdf[-1]) or cdf[-1] <= 0:
+                    # fallback to normal jitter if CDF invalid
+                    return np.random.normal(loc=mu, scale=max(sigma, 1e-9))
+                cdf /= cdf[-1]
+                u = np.random.rand()
+                return float(np.interp(u, cdf, x))
+
+            # draw one sample from each fitted IMB for h0 and h1
+            t0_imb[i, j] = sample_imb_random(μ_imb0, σ_imb0, ν_imb0)
+            t1_imb[i, j] = sample_imb_random(μ_imb1, σ_imb1, ν_imb1)
     print('✅ Random distributions generated.')
     print('⌛ Plotting ROC curves...')
 
@@ -235,6 +305,9 @@ def np_benchmark(ctx: Context=None):
 
     def lr_kde(u, v):
         return np.sum(np.log(kde_h1(u) / kde_h0(u)))
+    
+    def lr_imb(u, v):
+        return np.sum(np.log(imb(u, μ_imb1, σ_imb1, ν_imb1) / imb(u, μ_imb0, σ_imb0, ν_imb0)))
     
     # Plot ROC curves
     tests = copy(ALL_TESTS)
@@ -252,3 +325,7 @@ def np_benchmark(ctx: Context=None):
     print('📊 KDE case:')
     tests['Likelihood Ratio'] = lr_kde
     plot_rocs(t0_sim, t1_sim, tests=tests, figsize=(4, 4))
+    print('📊 IMB case:')
+    tests['Likelihood Ratio'] = lr_imb
+    plot_rocs(t0_imb, t1_imb, tests=tests, figsize=(4, 4))
+    print('✅ ROC curves plotted.')
