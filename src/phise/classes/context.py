@@ -499,11 +499,11 @@ class Context:
 
     # Observation -------------------------------------------------------------
 
-    def observe_monochromatic(self, opd_error:u.Quantity=None):
+    def observe_monochromatic(self, upstream_pistons:u.Quantity=None):
         """Observe the target with monochromatic approximation.
 
         Args:
-            opd_error (Optional[u.Quantity]): If provided, use this static
+            upstream_pistons (Optional[u.Quantity]): If provided, use this static
                 OPD error instead of random atmospheric piston. Shape: (n_telescopes,)
         Returns:
             np.ndarray[float]: Output intensities (photon events).
@@ -516,10 +516,10 @@ class Context:
         ψi = self.get_input_fields()
 
         # Get input OPD (atmospheric piston) for each telescope
-        if opd_error is None:
+        if upstream_pistons is None:
             Δφ = np.random.normal(0, self.Γ.to(u.nm).value, size=len(self.interferometer.telescopes))
         else:
-            Δφ = opd_error.to(u.nm).value
+            Δφ = upstream_pistons.to(u.nm).value
         λ = self.interferometer.λ.to(u.nm).value
 
         # Add the OPD error to the input fields
@@ -538,12 +538,12 @@ class Context:
 
         return outs
     
-    def observe(self, spectral_samples=5, opd_error:u.Quantity=None):
+    def observe(self, spectral_samples=5, upstream_pistons:u.Quantity=None):
         """Observe the target in this context.
 
         Args:
             spectral_samples (int): Number of spectral samples to acquire (default: 5).
-            opd_error (Optional[u.Quantity]): If provided, use this static
+            upstream_pistons (Optional[u.Quantity]): If provided, use this static
                 OPD error instead of random atmospheric piston. Shape: (n_telescopes,)
 
         Returns:
@@ -552,7 +552,7 @@ class Context:
 
         # If this context use monochromatic approximation
         if self.monochromatic:
-            return self.observe_monochromatic(opd_error=opd_error)
+            return self.observe_monochromatic(upstream_pistons=upstream_pistons)
 
         # Sampling bandwidth
         λ_range = np.linspace(self.interferometer.λ - self.interferometer.Δλ/2, self.interferometer.λ + self.interferometer.Δλ/2, spectral_samples)
@@ -562,10 +562,10 @@ class Context:
         outs = np.empty((spectral_samples, nb_outs))
 
         # Atmospheric piston for each telescope
-        if opd_error is None:
+        if upstream_pistons is None:
             Δφ = np.random.normal(0, self.Γ.value, size=len(self.interferometer.telescopes)) * self.Γ.unit
         else:
-            Δφ = opd_error
+            Δφ = upstream_pistons
 
         # Monochromatic approximation for each sub-band
         for i, λ in enumerate(λ_range):
@@ -573,7 +573,7 @@ class Context:
             ctx_mono.interferometer.λ = λ
             ctx_mono.interferometer.Δλ = 1 * u.nm
 
-            outs[i] = ctx_mono.observe_monochromatic(opd_error=Δφ)
+            outs[i] = ctx_mono.observe_monochromatic(upstream_pistons=Δφ)
 
         # Integrate over the bandwidth
         return np.trapz(outs, λ_range.value, axis=0)

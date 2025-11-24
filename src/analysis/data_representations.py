@@ -83,23 +83,23 @@ def get_K2(Γ, α=1, β=1, φ2=π/3, φ3=π/4, φ4=π/6, n=10_000):
     σ4 = np.random.normal(0, Γ, n)
 
     # champs étoile
-    S1s = np.sqrt(α) * (1
+    S1s = np.sqrt(α/4) * (1
                + np.exp(1j*(  π/2 + σ2))
                + np.exp(1j*(  π   + σ3))
                + np.exp(1j*(3*π/2 + σ4)))
 
-    S2s = np.sqrt(α) * (1
+    S2s = np.sqrt(α/4) * (1
                + np.exp(1j*(3*π/2 + σ2))
                + np.exp(1j*(  π   + σ3))
                + np.exp(1j*(  π/2 + σ4)))
 
     # champs planète (avec phases relatives)
-    S1p = np.sqrt(β) * (1
+    S1p = np.sqrt(β/4) * (1
                + np.exp(1j*(  π/2 + σ2 + φ2))
                + np.exp(1j*(  π   + σ3 + φ3))
                + np.exp(1j*(3*π/2 + σ4 + φ4)))
 
-    S2p = np.sqrt(β) * (1
+    S2p = np.sqrt(β/4) * (1
                + np.exp(1j*(3*π/2 + σ2 + φ2))
                + np.exp(1j*(  π   + σ3 + φ3))
                + np.exp(1j*(  π/2 + σ4 + φ4)))
@@ -117,23 +117,23 @@ def get_K3(Γ, α=1, β=1, φ2=π/3, φ3=π/4, φ4=π/6, n=10_000):
     σ4 = np.random.normal(0, Γ, n)
 
     # champs étoile
-    S1s = np.sqrt(α) * (1
+    S1s = np.sqrt(α/4) * (1
                + np.exp(1j*(  π   + σ2))
                + np.exp(1j*(  π/2 + σ3))
                + np.exp(1j*(3*π/2 + σ4)))
 
-    S2s = np.sqrt(α) * (1
+    S2s = np.sqrt(α/4) * (1
                + np.exp(1j*(  π   + σ2))
                + np.exp(1j*(3*π/2 + σ3))
                + np.exp(1j*(  π/2 + σ4)))
 
     # champs planète (avec phases relatives)
-    S1p = np.sqrt(β) * (1
+    S1p = np.sqrt(β/4) * (1
                + np.exp(1j*(  π   + σ2 + φ2))
                + np.exp(1j*(  π/2 + σ3 + φ3))
                + np.exp(1j*(3*π/2 + σ4 + φ4)))
 
-    S2p = np.sqrt(β) * (1
+    S2p = np.sqrt(β/4) * (1
                + np.exp(1j*(  π   + σ2 + φ2))
                + np.exp(1j*(3*π/2 + σ3 + φ3))
                + np.exp(1j*(  π/2 + σ4 + φ4)))
@@ -202,22 +202,22 @@ def instant_distribution(ctx: Context=None, n=10000, stat=np.median, figsize=(10
     for i in range(n):
 
         # Generate noise
-        opd_error = np.random.normal(0, ctx.Γ.value, size=len(ctx.interferometer.telescopes)) * ctx.Γ.unit
+        upstream_pistons = np.random.normal(0, ctx.Γ.value, size=len(ctx.interferometer.telescopes)) * ctx.Γ.unit
 
         # Distrib with companion(s)
-        outs = ctx.observe(opd_error=opd_error)
+        outs = ctx.observe(upstream_pistons=upstream_pistons)
         data[i, :] = ctx.interferometer.chip.process_outputs(outs)
-        brights[i] = np.sum(np.abs(outs)**2)
+        brights[i] = np.sum(outs)
         
         # Distrib with star only
-        outs_so = ctx_so.observe(opd_error=opd_error)
+        outs_so = ctx_so.observe(upstream_pistons=upstream_pistons)
         data_so[i, :] = ctx_so.interferometer.chip.process_outputs(outs_so)
-        brights_so[i] = np.sum(np.abs(outs_so)**2)
+        brights_so[i] = np.sum(outs_so)
 
         # Distrib with planet only
-        outs_po = ctx_po.observe(opd_error=opd_error)
+        outs_po = ctx_po.observe(upstream_pistons=upstream_pistons)
         data_po[i, :] = ctx_po.interferometer.chip.process_outputs(outs_po)
-        brights_po[i] = np.sum(np.abs(outs_po)**2)
+        brights_po[i] = np.sum(outs_po)
 
     print("Numerical model:")
     print(f'   Median brightness (star + planet): {np.median(brights):.3e}')
@@ -259,27 +259,15 @@ def instant_distribution(ctx: Context=None, n=10000, stat=np.median, figsize=(10
     analytical_data_so[:, 2] = tmp_so * r
     analytical_data_po[:, 2] = tmp_po * r
 
-    # Sum and convolution of distribs -----------------------------------------
+    # Sum of distributions -----------------------------------------
 
     data_comb = data_so + data_po
     analytical_comb = analytical_data_so + analytical_data_po
 
-    data_conv = np.empty((2 * int(np.sqrt(n)) + 1, 3))
-    analytical_conv = np.empty((2 * int(np.sqrt(n)) + 1, 3))
-
-    for k in range(3):
-        hist_so, bin_edges = np.histogram(data_so[:,k], bins=2 * int(np.sqrt(n)) + 1, density=density)
-        hist_po, _ = np.histogram(data_po[:,k], bins=bin_edges, density=density)
-        data_conv[:,k] = np.convolve(hist_so, hist_po, mode='same') / n
-
-        hist_so, bin_edges = np.histogram(analytical_data_so[:,k], bins=2 * int(np.sqrt(n)) + 1, density=density)
-        hist_po, _ = np.histogram(analytical_data_po[:,k], bins=bin_edges, density=density)
-        analytical_conv[:,k] = np.convolve(hist_so, hist_po, mode='same') / n
-
-        
-        if density:
-            data_conv[:,k] /= np.sum(data_conv[:,k]) * (bin_edges[1]-bin_edges[0])
-            analytical_conv[:,k] /= np.sum(analytical_conv[:,k]) * (bin_edges[1]-bin_edges[0])
+    # Note: the convolution (data_conv and analytical_conv) needs the
+    # histogram bins to be defined (dependent on plot limits). We compute
+    # the convolutions later inside the plotting loop once `bins` is set,
+    # so they are aligned with the plotted histograms.
     
     # Plotting ----------------------------------------------------------------
     
@@ -311,6 +299,28 @@ def instant_distribution(ctx: Context=None, n=10000, stat=np.median, figsize=(10
         else:
             bins = 2 * int(np.sqrt(n)) + 1
 
+        # If we are plotting the combined case (i==2), compute the
+        # convolution of the star-only and planet-only distributions
+        # on the same `bins` grid so stairs() aligns with hist().
+        if i == 2:
+            Nbins = len(bins)
+            Δbins = bins[1] - bins[0]
+            data_conv = np.zeros((Nbins, 3))
+            analytical_conv = np.zeros((Nbins, 3))
+            for kk in range(3):
+                # Numeric: use density=True to get PDFs, then convolve
+                hist_so, _ = np.histogram(data_so[:, kk], bins=bins, density=True)
+                hist_po, _ = np.histogram(data_po[:, kk], bins=bins, density=True)
+                conv = np.convolve(hist_so, hist_po, mode='full') * Δbins
+                start = (len(conv) - Nbins) // 2
+                data_conv[:, kk] = conv[start:start + Nbins]
+
+                # Analytical
+                ahist_so, _ = np.histogram(analytical_data_so[:, kk], bins=bins, density=True)
+                ahist_po, _ = np.histogram(analytical_data_po[:, kk], bins=bins, density=True)
+                aconv = np.convolve(ahist_so, ahist_po, mode='full') * Δbins
+                analytical_conv[:, kk] = aconv[start:start + Nbins]
+
         # Plot histograms
         for k in range(3):
             for j in range(3):
@@ -318,22 +328,22 @@ def instant_distribution(ctx: Context=None, n=10000, stat=np.median, figsize=(10
                     axs[k, j].hist(analytical_data[:,k], label='Analytic', bins=bins, alpha=0.5, color='green', density=density, log=log)
                     axs[k, j].axvline(stat(analytical_data[:,k]), color='green', linestyle='--')
                     if i==2:
-                        axs[k, j].hist(analytical_comb[:,k], label='Analytic (sum)', bins=bins, alpha=1, color='red', density=density, histtype='step', linewidth=2, log=log)
+                        axs[k, j].hist(analytical_comb[:,k], label='Analytic (sum)', bins=bins, alpha=0.5, color='red', density=density, histtype='step', linewidth=2, log=log)
                         axs[k, j].axvline(stat(analytical_comb[:,k]), color='red', linestyle='--')
                         Δbins = bins[1]-bins[0]
                         edges = bins - Δbins/2
                         edges = np.append(edges, edges[-1] + Δbins)
-                        axs[k, j].stairs(analytical_conv[:,k], edges=edges, label='Analytic (conv)', alpha=1, color='darkred', edgecolor='darkred', fill=False, linewidth=2)
+                        axs[k, j].stairs(analytical_conv[:,k], edges=edges, label='Analytic (conv)', alpha=0.5, color='purple', edgecolor='purple', fill=False, linewidth=2)
                 if j in [0,2]:
                     axs[k, j].hist(numerical_data[:, k], label='Numeric', bins=bins, alpha=0.5, color='blue', density=density, log=log)
                     axs[k, j].axvline(stat(numerical_data[:,k]), color='blue', linestyle='--')
                     if i==2:
-                        axs[k, j].hist(data_comb[:,k], label='Numeric (sum)', bins=bins, alpha=1, color='orange', density=density, histtype='step', linewidth=2, log=log)
+                        axs[k, j].hist(data_comb[:,k], label='Numeric (sum)', bins=bins, alpha=0.5, color='orange', density=density, histtype='step', linewidth=2, log=log)
                         axs[k, j].axvline(stat(data_comb[:,k]), color='orange', linestyle='--')
                         Δbins = bins[1]-bins[0]
                         edges = bins - Δbins/2
                         edges = np.append(edges, edges[-1] + Δbins)
-                        axs[k, j].stairs(data_conv[:,k], edges=edges, label='Numeric (conv)', alpha=1, color='darkorange', edgecolor='darkorange', fill=False, linewidth=2)
+                        axs[k, j].stairs(data_conv[:,k], edges=edges, label='Numeric (conv)', alpha=0.5, color='sienna', edgecolor='sienna', fill=False, linewidth=2)
                 # Set labels
                 axs[k,j].set_ylabel('Occurrences (%)')
                 axs[k,j].set_title(f'Kernel {k + 1}')
