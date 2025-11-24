@@ -1,0 +1,79 @@
+\documentclass[12pt]{article}
+\parindent 0mm
+\usepackage{amssymb,amsmath,amsfonts,latexsym,graphicx,amsthm,amstext}
+\usepackage{microtype} % Improve typography
+\usepackage{lmodern}
+\usepackage{longtable}
+\usepackage{color}
+% \usepackage{scrhack}
+\usepackage{placeins}
+% \usepackage{lipsum}
+\usepackage{lmodern}
+%\usepackage{indentfirst}
+\usepackage{ulem}
+\usepackage{xcolor}
+\usepackage{url}
+\usepackage{listings}
+\usepackage{comment}
+\usepackage{empheq}
+\usepackage{mathabx}
+\usepackage{siunitx}
+\usepackage{lscape}
+\usepackage{calc} 
+\usepackage{nopageno} %pour retirer la numerotation des pages
+\usepackage{hyperref} 
+
+\let\OLDthebibliography\thebibliography
+\renewcommand\thebibliography[1]{
+  \OLDthebibliography{#1}
+  \setlength{\parskip}{0pt}
+  \setlength{\itemsep}{0pt plus 0.3ex}
+}
+\usepackage[
+	top=1cm, % Top margin
+	bottom=1cm, % Bottom margin
+	inner=1.6cm, % Inner margin
+	outer=1.6cm, % Outer margin
+]{geometry}
+ 			
+\pagestyle{empty}
+
+\begin{document}
+SPIE 2026
+\hfill
+% PUT PANEL HERE
+
+\smallskip
+\hrule
+
+\bigskip
+
+\begin{center}
+\LARGE \bf Tunable Kernel-Nulling interferometry using active photonics for direct exoplanet detection\rm
+
+\vspace{0.5cm}
+
+\large  \underline{Vincent Foriel}$\,^{1,*}$, \large Frantz Martinache$\,^1$, \large David Mary$\,^1$, \large Marc-Antoine Martinod$\,^1$, \large Nick Cvetojevic$\,^1$, \large Romain Laugier$\,^2$, \large Sylvie Robbe-Dubois$\,^1$, \large Roxanne Ligi$\,^1$
+
+\vspace{0.5cm}
+
+\normalsize
+
+$^1$ \textit{Université Côte d'Azur, Observatoire de la Côte d'Azur Nice, CNRS, Laboratoire Lagrange, Nice, France}
+
+$^2$ \textit{KU Leuven, Leuven, Belgium}
+
+\vspace{0.3cm}
+$^*$E-mail: {\tt vincent.foriel@oca.eu}
+
+\end{center}
+\vspace{-0.8cm}
+\subsection*{\Large Abstract}
+
+Detecting Earth-like exoplanets demands extreme contrast ratios, high angular resolution, and long-term stability. Nulling interferometry is a promising technique to meet these requirements but it requires extreme phase control. We present one of the first implementations of an adaptive photonic nulling interferometer with a 4-telescope beam-combiner architecture, featuring 14 real-time thermo-optic phase shifters integrated within a silicon nitride photonic chip.
+
+We demonstrate two calibration algorithms which retrieve a near-ideal Kernel-Nuller device, using the integrated phase shifters to compensate for fabrication imperfections and upstream systematic piston errors. Furthermore, we show that the same calibration strategy can be used to adjust on-chip phase settings for wavelengths slightly different (but close) to the design wavelength \(\lambda_0\). This fine-tuning enables obtaining a deep null at a chosen \(\lambda\), allowing spectral scanning to target specific features such as biosignatures in exoplanet atmospheres.
+
+Additionally, we present advanced data-treatment and statistical analysis approaches to enable robust exoplanet detection and characterization, including precise determination of companion position and contrast. Numerical simulations are performed using the VLTI/NOTT and LIFE mission architectures to anchor our results in realistic observing scenarios. These findings are further supported by laboratory testbed experiments, providing validation of our detection capabilities across diverse instrumental configurations.
+
+\end{document}

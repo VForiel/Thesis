@@ -435,7 +435,7 @@ class Context:
             ρ = c.ρ.to(u.rad)
             p = self.p.to(u.m)
             λ = self.interferometer.λ.to(u.m)
-            ψ = get_unique_source_input_fields_jit(a=1, ρ=ρ.value, θ=θ.value, λ=λ.value, p=p.value)
+            ψ = get_unique_source_input_fields_jit(a=np.ones(4)/4, ρ=ρ.value, θ=θ.value, λ=λ.value, p=p.value)
 
             out_fields = self.interferometer.chip.get_output_fields(ψ=ψ, λ=self.interferometer.λ)
             raw_outs = np.abs(out_fields)**2
@@ -1114,7 +1114,7 @@ def get_transmission_map_jit(
             θ = θ_map[x, y]
             ρ = ρ_map[x, y]
 
-            ψ = get_unique_source_input_fields_jit(a=1, ρ=ρ, θ=θ, λ=λ, p=p)
+            ψ = get_unique_source_input_fields_jit(a=np.ones(4)/4, ρ=ρ, θ=θ, λ=λ, p=p)
             raw_outs = np.abs(superkn.get_output_fields_jit(ψ, φ, σ, λ, λ0, output_order))**2
 
             for i in range(nb_raw_outputs):
@@ -1154,6 +1154,8 @@ def get_unique_source_input_fields_jit(
     - Array of acquired signals (complex amplitudes).
     """
 
+    assert len(a) == len(p), "Length of amplitudes (len(a)) must be equal to number of telescopes (len(p))."
+
     # Array of complex signals
     s = np.empty(p.shape[0], dtype=np.complex128)
 
@@ -1168,4 +1170,4 @@ def get_unique_source_input_fields_jit(
         # Build the complex amplitude of the signal
         s[i] = np.exp(1j * Φ)
 
-    return s * np.sqrt(a/len(p))
+    return s * np.sqrt(a)

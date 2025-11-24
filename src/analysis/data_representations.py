@@ -24,13 +24,13 @@ def get_B(Γ, α=1, β=1, φ2=π/3, φ3=π/4, φ4=π/6, n=10_000):
     σ4 = np.random.normal(0, Γ, n)
 
     # champs étoile
-    Bs = np.abs(np.sqrt(α/4) * (1
+    Bs = np.abs(np.sqrt(α/4/7) * (1
                + np.exp(1j*(σ2))
                + np.exp(1j*(σ3))
                + np.exp(1j*(σ4))))**2
 
     # champs planète (avec phases relatives)
-    Bp = np.abs(np.sqrt(β/4) * (1
+    Bp = np.abs(np.sqrt(β/4/7) * (1
                + np.exp(1j*(σ2 + φ2))
                + np.exp(1j*(σ3 + φ3))
                + np.exp(1j*(σ4 + φ4))))**2
@@ -45,23 +45,23 @@ def get_K1(Γ, α=1, β=1, φ2=π/3, φ3=π/4, φ4=π/6, n=10_000):
     σ4 = np.random.normal(0, Γ, n)
 
     # champs étoile
-    S1s = np.sqrt(α/4) * (1
+    S1s = np.sqrt(α/4/7) * (1
                + np.exp(1j*(  π/2 + σ2))
                + np.exp(1j*(3*π/2 + σ3))
                + np.exp(1j*(  π   + σ4)))
 
-    S2s = np.sqrt(α/4) * (1
+    S2s = np.sqrt(α/4/7) * (1
                + np.exp(1j*(3*π/2 + σ2))
                + np.exp(1j*(  π/2 + σ3))
                + np.exp(1j*(  π   + σ4)))
 
     # champs planète (avec phases relatives)
-    S1p = np.sqrt(β/4) * (1
+    S1p = np.sqrt(β/4/7) * (1
                + np.exp(1j*(  π/2 + σ2 + φ2))
                + np.exp(1j*(3*π/2 + σ3 + φ3))
                + np.exp(1j*(  π   + σ4 + φ4)))
 
-    S2p = np.sqrt(β/4) * (1
+    S2p = np.sqrt(β/4/7) * (1
                + np.exp(1j*(3*π/2 + σ2 + φ2))
                + np.exp(1j*(  π/2 + σ3 + φ3))
                + np.exp(1j*(  π   + σ4 + φ4)))
@@ -83,23 +83,23 @@ def get_K2(Γ, α=1, β=1, φ2=π/3, φ3=π/4, φ4=π/6, n=10_000):
     σ4 = np.random.normal(0, Γ, n)
 
     # champs étoile
-    S1s = np.sqrt(α/4) * (1
+    S1s = np.sqrt(α/4/7) * (1
                + np.exp(1j*(  π/2 + σ2))
                + np.exp(1j*(  π   + σ3))
                + np.exp(1j*(3*π/2 + σ4)))
 
-    S2s = np.sqrt(α/4) * (1
+    S2s = np.sqrt(α/4/7) * (1
                + np.exp(1j*(3*π/2 + σ2))
                + np.exp(1j*(  π   + σ3))
                + np.exp(1j*(  π/2 + σ4)))
 
     # champs planète (avec phases relatives)
-    S1p = np.sqrt(β/4) * (1
+    S1p = np.sqrt(β/4/7) * (1
                + np.exp(1j*(  π/2 + σ2 + φ2))
                + np.exp(1j*(  π   + σ3 + φ3))
                + np.exp(1j*(3*π/2 + σ4 + φ4)))
 
-    S2p = np.sqrt(β/4) * (1
+    S2p = np.sqrt(β/4/7) * (1
                + np.exp(1j*(3*π/2 + σ2 + φ2))
                + np.exp(1j*(  π   + σ3 + φ3))
                + np.exp(1j*(  π/2 + σ4 + φ4)))
@@ -117,23 +117,23 @@ def get_K3(Γ, α=1, β=1, φ2=π/3, φ3=π/4, φ4=π/6, n=10_000):
     σ4 = np.random.normal(0, Γ, n)
 
     # champs étoile
-    S1s = np.sqrt(α/4) * (1
+    S1s = np.sqrt(α/4/7) * (1
                + np.exp(1j*(  π   + σ2))
                + np.exp(1j*(  π/2 + σ3))
                + np.exp(1j*(3*π/2 + σ4)))
 
-    S2s = np.sqrt(α/4) * (1
+    S2s = np.sqrt(α/4/7) * (1
                + np.exp(1j*(  π   + σ2))
                + np.exp(1j*(3*π/2 + σ3))
                + np.exp(1j*(  π/2 + σ4)))
 
     # champs planète (avec phases relatives)
-    S1p = np.sqrt(β/4) * (1
+    S1p = np.sqrt(β/4/7) * (1
                + np.exp(1j*(  π   + σ2 + φ2))
                + np.exp(1j*(  π/2 + σ3 + φ3))
                + np.exp(1j*(3*π/2 + σ4 + φ4)))
 
-    S2p = np.sqrt(β/4) * (1
+    S2p = np.sqrt(β/4/7) * (1
                + np.exp(1j*(  π   + σ2 + φ2))
                + np.exp(1j*(3*π/2 + σ3 + φ3))
                + np.exp(1j*(  π/2 + σ4 + φ4)))
@@ -207,17 +207,17 @@ def instant_distribution(ctx: Context=None, n=10000, stat=np.median, figsize=(10
         # Distrib with companion(s)
         outs = ctx.observe(upstream_pistons=upstream_pistons)
         data[i, :] = ctx.interferometer.chip.process_outputs(outs)
-        brights[i] = np.sum(outs)
+        brights[i] = outs[0]
         
         # Distrib with star only
         outs_so = ctx_so.observe(upstream_pistons=upstream_pistons)
         data_so[i, :] = ctx_so.interferometer.chip.process_outputs(outs_so)
-        brights_so[i] = np.sum(outs_so)
+        brights_so[i] = outs_so[0]
 
         # Distrib with planet only
         outs_po = ctx_po.observe(upstream_pistons=upstream_pistons)
         data_po[i, :] = ctx_po.interferometer.chip.process_outputs(outs_po)
-        brights_po[i] = np.sum(outs_po)
+        brights_po[i] = outs_po[0]
 
     print("Numerical model:")
     print(f'   Median brightness (star + planet): {np.median(brights):.3e}')
@@ -234,9 +234,11 @@ def instant_distribution(ctx: Context=None, n=10000, stat=np.median, figsize=(10
     # Get parameters (amplitude and phases)
     ψi = ctx.get_input_fields()
     φi1, φi2, φi3, φi4 = np.angle(ψi[1])
-    α = (np.mean(ctx.pf)).value
+    α = np.sum(ctx.pf).value
     β = α * ctx.target.companions[0].c
     Γ = ctx.Γ.to(u.nm).value / ctx.interferometer.λ.to(u.nm).value * 2 * np.pi
+
+    print(np.sum(ctx.pf), α, " | ", np.sum(ctx.pf * ctx.target.companions[0].c), β)
 
     # Get kernels
     brights_so, brights_po, brights = get_B(Γ=Γ, α=α, β=β, φ2=φi2-φi1, φ3=φi3-φi1, φ4=φi4-φi1, n=n)
