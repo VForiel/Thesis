@@ -16,52 +16,66 @@ from phise import Context
 
 π = np.pi
 
-def get_B(Γ, α=1, β=1, φ2=π/3, φ3=π/4, φ4=π/6, n=10_000):
+def get_B(Γ, α=1, β=1, φ1=0, φ2=π/3, φ3=π/4, φ4=π/6, n=10_000, ctx=None):
 
     # tirage bruit
+    σ1 = np.random.normal(0, Γ, n)
     σ2 = np.random.normal(0, Γ, n)
     σ3 = np.random.normal(0, Γ, n)
     σ4 = np.random.normal(0, Γ, n)
 
     # champs étoile
-    Bs = np.abs(np.sqrt(α/4/7) * (1
+    Bs = np.abs(np.sqrt(α/4/7) * (
+                 np.exp(1j*(σ1))
                + np.exp(1j*(σ2))
                + np.exp(1j*(σ3))
-               + np.exp(1j*(σ4))))**2
+               + np.exp(1j*(σ4))
+            ))**2
 
     # champs planète (avec phases relatives)
-    Bp = np.abs(np.sqrt(β/4/7) * (1
+    Bp = np.abs(np.sqrt(β/4/7) * (
+                 np.exp(1j*(σ1 + φ1))
                + np.exp(1j*(σ2 + φ2))
                + np.exp(1j*(σ3 + φ3))
-               + np.exp(1j*(σ4 + φ4))))**2
+               + np.exp(1j*(σ4 + φ4))
+            ))**2
+    
+    errors = np.array([σ1, σ2, σ3, σ4]).T # debug
+    print(f"Analytical upstream piston errors (rad): {np.mean(errors):.3e} ± {np.std(errors):.3e}")
+    print(f"Analytical upstream piston errors (nm): {np.mean(errors)/2/np.pi*ctx.interferometer.λ.to(u.nm):.3e} ± {np.std(errors)/2/np.pi*ctx.interferometer.λ.to(u.nm):.3e}")
 
     return Bs, Bp, Bs + Bp
     
-def get_K1(Γ, α=1, β=1, φ2=π/3, φ3=π/4, φ4=π/6, n=10_000):
+def get_K1(Γ, α=1, β=1, φ1=0, φ2=π/3, φ3=π/4, φ4=π/6, n=10_000):
 
     # tirage bruit
+    σ1 = np.random.normal(0, Γ, n)
     σ2 = np.random.normal(0, Γ, n)
     σ3 = np.random.normal(0, Γ, n)
     σ4 = np.random.normal(0, Γ, n)
 
     # champs étoile
-    S1s = np.sqrt(α/4/7) * (1
+    S1s = np.sqrt(α/4/7) * (
+                 np.exp(1j*(        σ1))
                + np.exp(1j*(  π/2 + σ2))
                + np.exp(1j*(3*π/2 + σ3))
                + np.exp(1j*(  π   + σ4)))
 
-    S2s = np.sqrt(α/4/7) * (1
+    S2s = np.sqrt(α/4/7) * (
+                 np.exp(1j*(        σ1))
                + np.exp(1j*(3*π/2 + σ2))
                + np.exp(1j*(  π/2 + σ3))
                + np.exp(1j*(  π   + σ4)))
 
     # champs planète (avec phases relatives)
-    S1p = np.sqrt(β/4/7) * (1
+    S1p = np.sqrt(β/4/7) * (
+                 np.exp(1j*(        σ1 + φ1))
                + np.exp(1j*(  π/2 + σ2 + φ2))
                + np.exp(1j*(3*π/2 + σ3 + φ3))
                + np.exp(1j*(  π   + σ4 + φ4)))
 
-    S2p = np.sqrt(β/4/7) * (1
+    S2p = np.sqrt(β/4/7) * (
+                 np.exp(1j*(        σ1 + φ1))
                + np.exp(1j*(3*π/2 + σ2 + φ2))
                + np.exp(1j*(  π/2 + σ3 + φ3))
                + np.exp(1j*(  π   + σ4 + φ4)))
@@ -75,31 +89,36 @@ def get_K1(Γ, α=1, β=1, φ2=π/3, φ3=π/4, φ4=π/6, n=10_000):
 
     return Ks, Kp, K
 
-def get_K2(Γ, α=1, β=1, φ2=π/3, φ3=π/4, φ4=π/6, n=10_000):
+def get_K2(Γ, α=1, β=1, φ1=0, φ2=π/3, φ3=π/4, φ4=π/6, n=10_000):
 
     # tirage bruit
+    σ1 = np.random.normal(0, Γ, n)
     σ2 = np.random.normal(0, Γ, n)
     σ3 = np.random.normal(0, Γ, n)
     σ4 = np.random.normal(0, Γ, n)
 
     # champs étoile
-    S1s = np.sqrt(α/4/7) * (1
+    S1s = np.sqrt(α/4/7) * (
+                 np.exp(1j*(        σ1))
                + np.exp(1j*(  π/2 + σ2))
                + np.exp(1j*(  π   + σ3))
                + np.exp(1j*(3*π/2 + σ4)))
 
-    S2s = np.sqrt(α/4/7) * (1
+    S2s = np.sqrt(α/4/7) * (
+                 np.exp(1j*(        σ1))
                + np.exp(1j*(3*π/2 + σ2))
                + np.exp(1j*(  π   + σ3))
                + np.exp(1j*(  π/2 + σ4)))
 
     # champs planète (avec phases relatives)
-    S1p = np.sqrt(β/4/7) * (1
+    S1p = np.sqrt(β/4/7) * (
+                 np.exp(1j*(        σ1 + φ1))
                + np.exp(1j*(  π/2 + σ2 + φ2))
                + np.exp(1j*(  π   + σ3 + φ3))
                + np.exp(1j*(3*π/2 + σ4 + φ4)))
 
-    S2p = np.sqrt(β/4/7) * (1
+    S2p = np.sqrt(β/4/7) * (
+                 np.exp(1j*(        σ1 + φ1))
                + np.exp(1j*(3*π/2 + σ2 + φ2))
                + np.exp(1j*(  π   + σ3 + φ3))
                + np.exp(1j*(  π/2 + σ4 + φ4)))
@@ -109,31 +128,36 @@ def get_K2(Γ, α=1, β=1, φ2=π/3, φ3=π/4, φ4=π/6, n=10_000):
 
     return Ks, Kp, Ks + Kp
 
-def get_K3(Γ, α=1, β=1, φ2=π/3, φ3=π/4, φ4=π/6, n=10_000):
+def get_K3(Γ, α=1, β=1, φ1=0, φ2=π/3, φ3=π/4, φ4=π/6, n=10_000):
 
     # tirage bruit
+    σ1 = np.random.normal(0, Γ, n)
     σ2 = np.random.normal(0, Γ, n)
     σ3 = np.random.normal(0, Γ, n)
     σ4 = np.random.normal(0, Γ, n)
 
     # champs étoile
-    S1s = np.sqrt(α/4/7) * (1
+    S1s = np.sqrt(α/4/7) * (
+                 np.exp(1j*(        σ1))
                + np.exp(1j*(  π   + σ2))
                + np.exp(1j*(  π/2 + σ3))
                + np.exp(1j*(3*π/2 + σ4)))
 
-    S2s = np.sqrt(α/4/7) * (1
+    S2s = np.sqrt(α/4/7) * (
+                 np.exp(1j*(        σ1))
                + np.exp(1j*(  π   + σ2))
                + np.exp(1j*(3*π/2 + σ3))
                + np.exp(1j*(  π/2 + σ4)))
 
     # champs planète (avec phases relatives)
-    S1p = np.sqrt(β/4/7) * (1
+    S1p = np.sqrt(β/4/7) * (
+                 np.exp(1j*(        σ1 + φ1))
                + np.exp(1j*(  π   + σ2 + φ2))
                + np.exp(1j*(  π/2 + σ3 + φ3))
                + np.exp(1j*(3*π/2 + σ4 + φ4)))
 
-    S2p = np.sqrt(β/4/7) * (1
+    S2p = np.sqrt(β/4/7) * (
+                 np.exp(1j*(        σ1 + φ1))
                + np.exp(1j*(  π   + σ2 + φ2))
                + np.exp(1j*(3*π/2 + σ3 + φ3))
                + np.exp(1j*(  π/2 + σ4 + φ4)))
@@ -198,11 +222,14 @@ def instant_distribution(ctx: Context=None, n=10000, stat=np.median, figsize=(10
     brights_so = np.empty(n)
     brights_po = np.empty(n)
 
+    errors = np.empty((n, 4)) * ctx.Γ.unit
+
     # Sample data
     for i in range(n):
 
         # Generate noise
         upstream_pistons = np.random.normal(0, ctx.Γ.value, size=len(ctx.interferometer.telescopes)) * ctx.Γ.unit
+        errors[i, :] = upstream_pistons
 
         # Distrib with companion(s)
         outs = ctx.observe(upstream_pistons=upstream_pistons)
@@ -219,10 +246,6 @@ def instant_distribution(ctx: Context=None, n=10000, stat=np.median, figsize=(10
         data_po[i, :] = ctx_po.interferometer.chip.process_outputs(outs_po)
         brights_po[i] = outs_po[0]
 
-    print("Numerical model:")
-    print(f'   Median brightness (star + planet): {np.median(brights):.3e}')
-    print(f'   Median brightness (star only): {np.median(brights_so):.3e}')
-    print(f'   Median brightness (planet only): {np.median(brights_po):.3e}')
 
     # Analytical model --------------------------------------------------------
 
@@ -233,33 +256,64 @@ def instant_distribution(ctx: Context=None, n=10000, stat=np.median, figsize=(10
 
     # Get parameters (amplitude and phases)
     ψi = ctx.get_input_fields()
-    φi1, φi2, φi3, φi4 = np.angle(ψi[1])
+    φ1, φ2, φ3, φ4 = np.angle(ψi[1])
+    # φ2=φ2-φ1; φ3=φ3-φ1; φ4=φ4-φ1
+    # φ1 = 0
     α = np.sum(ctx.pf).value
     β = α * ctx.target.companions[0].c
     Γ = ctx.Γ.to(u.nm).value / ctx.interferometer.λ.to(u.nm).value * 2 * np.pi
 
-    print(np.sum(ctx.pf), α, " | ", np.sum(ctx.pf * ctx.target.companions[0].c), β)
-
     # Get kernels
-    brights_so, brights_po, brights = get_B(Γ=Γ, α=α, β=β, φ2=φi2-φi1, φ3=φi3-φi1, φ4=φi4-φi1, n=n)
+    analytical_brights_so, analytical_brights_po, analytical_brights = get_B(Γ=Γ, α=α, β=β, φ1=φ1, φ2=φ2, φ3=φ3, φ4=φ4, n=n, ctx=ctx)
 
-    print("Analytical model:")
-    print(f'   Median brightness (star + planet): {np.median(brights):.3e}')
-    print(f'   Median brightness (star only): {np.median(brights_so):.3e}')
-    print(f'   Median brightness (planet only): {np.median(brights_po):.3e}')
-
-    tmp_so, tmp_po, tmp = get_K1(Γ=Γ, α=α, β=β, φ2=φi2-φi1, φ3=φi3-φi1, φ4=φi4-φi1, n=n)
+    tmp_so, tmp_po, tmp = get_K1(Γ=Γ, α=α, β=β, φ1=φ1, φ2=φ2, φ3=φ3, φ4=φ4, n=n)
     analytical_data[:, 0] = tmp * r
     analytical_data_so[:, 0] = tmp_so * r
     analytical_data_po[:, 0] = tmp_po * r
-    tmp_so, tmp_po, tmp = get_K2(Γ=Γ,  α=α, β=β, φ2=φi2-φi1, φ3=φi3-φi1, φ4=φi4-φi1, n=n)
+    tmp_so, tmp_po, tmp = get_K2(Γ=Γ,  α=α, β=β, φ1=φ1, φ2=φ2, φ3=φ3, φ4=φ4, n=n)
     analytical_data[:, 1] = tmp * r
     analytical_data_so[:, 1] = tmp_so * r
     analytical_data_po[:, 1] = tmp_po * r
-    tmp_so, tmp_po, tmp = get_K3(Γ=Γ,  α=α, β=β, φ2=φi2-φi1, φ3=φi3-φi1, φ4=φi4-φi1, n=n)
+    tmp_so, tmp_po, tmp = get_K3(Γ=Γ,  α=α, β=β, φ1=φ1, φ2=φ2, φ3=φ3, φ4=φ4, n=n)
     analytical_data[:, 2] = tmp * r
     analytical_data_so[:, 2] = tmp_so * r
     analytical_data_po[:, 2] = tmp_po * r
+
+    # Debug info --------------------------------------------------------------
+
+    print(f"Numerical upstream piston errors (rad): {np.mean(errors).to(u.m)*2*np.pi/ctx.interferometer.λ.to(u.m):.3e} ± {np.std(errors).to(u.m)*2*np.pi/ctx.interferometer.λ.to(u.m):.3e}")
+    print(f"Numerical upstream piston errors (nm): {np.mean(errors):.3e} ± {np.std(errors):.3e}")
+
+    print('\nInput photon flux:\n')
+    print(f"   Numerical: Star: {np.sum(ctx.pf):.3e}   Planet: {np.sum(ctx.pf * ctx.target.companions[0].c):.3e}")
+    print(f"   Analytical: Star: {α:.3e}   Planet: {β:.3e}")
+
+    print("\nOutput photon flux:\n")
+
+    print("Bright:")
+    print("   Numerical model:")
+    print(f'      Median brightness (star + planet): {np.median(brights):.3e}')
+    print(f'      Median brightness (star only): {np.median(brights_so):.3e}')
+    print(f'      Median brightness (planet only): {np.median(brights_po):.3e}')
+
+    print("   Analytical model:")
+    print(f'      Median brightness (star + planet): {np.median(analytical_brights):.3e}')
+    print(f'      Median brightness (star only): {np.median(analytical_brights_so):.3e}')
+    print(f'      Median brightness (planet only): {np.median(analytical_brights_po):.3e}')
+
+    print("\nKernels:")
+    print("   Numerical model:")
+    for k in range(3):
+        print(f'      Kernel {k + 1}:')
+        print(f'         Median kernel {k + 1} (star + planet): {stat(data[:, k]):.3e}')
+        print(f'         Median kernel {k + 1} (star only): {stat(data_so[:, k]):.3e}')
+        print(f'         Median kernel {k + 1} (planet only): {stat(data_po[:, k]):.3e}')
+    print("   Analytical model:")
+    for k in range(3):
+        print(f'      Kernel {k + 1}:')
+        print(f'         Median kernel {k + 1} (star + planet): {stat(analytical_data[:, k]):.3e}')
+        print(f'         Median kernel {k + 1} (star only): {stat(analytical_data_so[:, k]):.3e}')
+        print(f'         Median kernel {k + 1} (planet only): {stat(analytical_data_po[:, k]):.3e}')
 
     # Sum of distributions -----------------------------------------
 
