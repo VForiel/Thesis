@@ -342,6 +342,107 @@ class Context:
 
         return get_transmission_map_jit(N=N, φ=φ, σ=σ, p=p, λ=λ, λ0=λ0, fov=fov, output_order=output_order, nb_raw_outputs=nb_raw_outputs, nb_processed_outputs=nb_processed_outputs)
 
+    # Analytical transmission maps --------------------------------------------
+
+    def get_analytical_transmission_maps(self, N:int) -> np.ndarray[float]:
+        """Generate analytical kernel nuller transmission maps at a given resolution.
+
+        This method uses a simplified analytical model that expresses the kernel
+        outputs directly as a function of input phases, bypassing the full photonic
+        chip simulation. The analytical model assumes ideal phase relationships
+        (0, π/2, π, 3π/2) from the MMI combiners.
+
+        The analytical model is faster than the numerical model and provides
+        insight into the fundamental transmission patterns, but does not account
+        for wavelength-dependent effects, manufacturing errors (σ), or injected
+        phase shifts (φ).
+
+        Physics:
+            For a 4-telescope kernel nuller, the input phases are determined by
+            the projected baselines and source position:
+            φᵢ = 2π · (pᵢ · sin(ρ)) / λ · cos(θ - θᵢ)
+            
+            The kernel outputs are computed from differences of dark outputs:
+            Kₙ = |D₂ₙ₋₁|² - |D₂ₙ|²
+            
+            where the dark outputs combine inputs with fixed phase shifts from
+            the MMI combiners.
+
+        Args:
+            N (int): Map resolution (N×N pixels).
+
+        Returns:
+            tuple[np.ndarray[float], np.ndarray[float]]:
+                - bright_map: Bright output transmission map (N×N)
+                - kernel_maps: Kernel outputs transmission maps (3×N×N)
+        """
+
+        p = self.p.value  # Projected telescope positions [m]
+        λ = self.interferometer.λ.to(u.m).value  # Wavelength [m]
+        fov = self.interferometer.fov  # Field of view [mas]
+
+        return get_analytical_transmission_map_jit(N=N, p=p, λ=λ, fov=fov)
+
+    def plot_analytical_transmission_maps(self, N:int, return_plot:bool = False) -> None:
+        """Plot the analytical transmission maps of the kernel nuller.
+
+        This method visualizes the transmission maps computed using the simplified
+        analytical model. The analytical model provides faster computation and
+        clearer insight into the fundamental transmission patterns.
+
+        Args:
+            N (int): Map resolution (N×N pixels).
+            return_plot (bool): If True, return plot as PNG bytes and HTML text
+                instead of displaying.
+
+        Returns:
+            None or tuple[bytes, str]: If return_plot is True, returns (PNG bytes, HTML string).
+        """
+
+        # Get analytical transmission maps
+        bright_map, kernel_maps = self.get_analytical_transmission_maps(N=N)
+
+        # Get companions position to plot them
+        companions_pos = []
+        for c in self.target.companions:
+            x, y = coordinates.ρθ_to_xy(ρ=c.ρ, θ=c.θ, fov=self.interferometer.fov)
+            companions_pos.append((x*self.interferometer.fov/2, y*self.interferometer.fov/2))
+
+        nb_kernels = 3
+        _, axs = plt.subplots(1, 4, figsize=(5*4, 5))
+
+        fov = self.interferometer.fov
+        extent = (-fov.value/2, fov.value/2, -fov.value/2, fov.value/2)
+
+        # Plot bright output
+        im = axs[0].imshow(bright_map, aspect="equal", cmap="hot", extent=extent)
+        axs[0].set_title("Bright (analytical)")
+        plt.colorbar(im, ax=axs[0])
+        axs[0].set_xlabel(r"$\theta_x$" + f" ({fov.unit})")
+        axs[0].set_ylabel(r"$\theta_y$" + f" ({fov.unit})")
+        axs[0].scatter(0, 0, color="yellow", marker="*", edgecolors="black", s=100)
+        for x, y in companions_pos:
+            axs[0].scatter(x, y, color="blue", edgecolors="black")
+
+        # Plot kernel outputs
+        for i in range(nb_kernels):
+            im = axs[i+1].imshow(kernel_maps[i], aspect="equal", cmap="bwr", extent=extent)
+            axs[i+1].set_title(f"Kernel {i+1} (analytical)")
+            plt.colorbar(im, ax=axs[i+1])
+            axs[i+1].set_xlabel(r"$\theta_x$" + f" ({fov.unit})")
+            axs[i+1].set_ylabel(r"$\theta_y$" + f" ({fov.unit})")
+            axs[i+1].scatter(0, 0, color="yellow", marker="*", edgecolors="black", s=100)
+            for x, y in companions_pos:
+                axs[i+1].scatter(x, y, color="blue", edgecolors="black")
+
+        if return_plot:
+            plot = BytesIO()
+            plt.savefig(plot, format='png')
+            plt.close()
+            transmissions = "<p>Analytical transmission maps</p>"
+            return plot.getvalue(), transmissions
+        plt.show()
+
     # Get transmission map gradiant norm --------------------------------------
 
     def get_transmission_map_gradient_norm(self, N:int) -> np.ndarray[float]:
@@ -1127,6 +1228,154 @@ def get_transmission_map_jit(
                     processed_out_maps[i, x, y] = processed_outs[i]
 
     return raw_out_maps, processed_out_maps
+
+
+# Analytical transmission maps ------------------------------------------------
+
+@nb.njit()
+def get_analytical_transmission_map_jit(
+        N: int,
+        p: np.ndarray[float],
+        λ: float,
+        fov: float,
+    ) -> tuple[np.ndarray[float], np.ndarray[float]]:
+    """Generate analytical transmission maps using simplified closed-form expressions.
+
+    This function computes the transmission maps of a 4-telescope kernel nuller
+    using an analytical model that directly expresses the outputs as functions
+    of the input phases. The model assumes ideal MMI phase relationships and
+    does not include manufacturing errors or injected phase shifts.
+
+    The analytical model provides insight into the fundamental transmission patterns
+    and is computationally faster than the full numerical simulation.
+
+    Physics Background:
+        The kernel nuller combines light from 4 telescopes through a series of
+        beam combiners. For an ideal chip at the design wavelength:
+        
+        1. Bright output: All inputs combined constructively
+           B = |ψ₁ + ψ₂ + ψ₃ + ψ₄|² / 4
+        
+        2. Dark outputs: Inputs combined with π/2 phase shifts
+           The chip architecture creates pairs of dark outputs where the
+           differences (kernels) are insensitive to symmetric aberrations.
+        
+        3. Kernel outputs: K_n = |D_{2n-1}|² - |D_{2n}|²
+           These are the differences between paired dark outputs.
+
+    Parameters
+    ----------
+    N : int
+        Resolution of the map (N×N pixels).
+    p : np.ndarray[float]
+        Projected telescope positions (4, 2) in meters.
+    λ : float
+        Wavelength in meters.
+    fov : float
+        Field of view in mas (milliarcseconds).
+
+    Returns
+    -------
+    bright_map : np.ndarray[float]
+        Bright output transmission map (N×N).
+    kernel_maps : np.ndarray[float]
+        Kernel outputs transmission maps (3×N×N).
+    """
+
+    π = np.pi
+
+    # Get the coordinates of the map
+    _, _, θ_map, ρ_map = coordinates.get_maps_jit(N=N, fov=fov)
+
+    # Convert mas to radians
+    ρ_map = ρ_map / 1000 / 3600 / 180 * π
+
+    # Initialize output arrays
+    bright_map = np.empty((N, N))
+    kernel_maps = np.empty((3, N, N))
+
+    # Normalization factor: 1/4 for 4 telescopes, 1/7 for the number of outputs
+    norm = 1.0 / 4.0 / 7.0
+
+    for x in range(N):
+        for y in range(N):
+            
+            θ = θ_map[x, y]  # Position angle [rad]
+            ρ = ρ_map[x, y]  # Angular separation [rad]
+
+            # Compute input phases from source position
+            # φᵢ = 2π · (pᵢ · sin(ρ)) / λ · projection_factor
+            φ = np.empty(4)
+            for i in range(4):
+                # Rotate projected telescope positions by parallactic angle
+                p_rot = p[i, 0] * np.cos(-θ) - p[i, 1] * np.sin(-θ)
+                # Compute phase delay
+                φ[i] = 2 * π * p_rot * np.sin(ρ) / λ
+
+            # --- Bright output ---
+            # All inputs combined with equal phases (constructive interference)
+            B = norm * np.abs(
+                np.exp(1j * φ[0]) + 
+                np.exp(1j * φ[1]) + 
+                np.exp(1j * φ[2]) + 
+                np.exp(1j * φ[3])
+            )**2
+            bright_map[x, y] = B
+
+            # --- Kernel 1: baselines (1,4) and (2,3) ---
+            # Dark outputs from combining inputs with π/2 phase shifts
+            # D1: phase shifts [0, π/2, 3π/2, π]
+            # D2: phase shifts [0, 3π/2, π/2, π]
+            D1_K1 = norm * np.abs(
+                np.exp(1j * (φ[0])) + 
+                np.exp(1j * (φ[1] + π/2)) + 
+                np.exp(1j * (φ[2] + 3*π/2)) + 
+                np.exp(1j * (φ[3] + π))
+            )**2
+            D2_K1 = norm * np.abs(
+                np.exp(1j * (φ[0])) + 
+                np.exp(1j * (φ[1] + 3*π/2)) + 
+                np.exp(1j * (φ[2] + π/2)) + 
+                np.exp(1j * (φ[3] + π))
+            )**2
+            kernel_maps[0, x, y] = D1_K1 - D2_K1
+
+            # --- Kernel 2: baselines (1,3) and (2,4) ---
+            # D1: phase shifts [0, π/2, π, 3π/2]
+            # D2: phase shifts [0, 3π/2, π, π/2]
+            D1_K2 = norm * np.abs(
+                np.exp(1j * (φ[0])) + 
+                np.exp(1j * (φ[1] + π/2)) + 
+                np.exp(1j * (φ[2] + π)) + 
+                np.exp(1j * (φ[3] + 3*π/2))
+            )**2
+            D2_K2 = norm * np.abs(
+                np.exp(1j * (φ[0])) + 
+                np.exp(1j * (φ[1] + 3*π/2)) + 
+                np.exp(1j * (φ[2] + π)) + 
+                np.exp(1j * (φ[3] + π/2))
+            )**2
+            kernel_maps[1, x, y] = D1_K2 - D2_K2
+
+            # --- Kernel 3: baselines (1,2) and (3,4) ---
+            # D1: phase shifts [0, π, π/2, 3π/2]
+            # D2: phase shifts [0, π, 3π/2, π/2]
+            D1_K3 = norm * np.abs(
+                np.exp(1j * (φ[0])) + 
+                np.exp(1j * (φ[1] + π)) + 
+                np.exp(1j * (φ[2] + π/2)) + 
+                np.exp(1j * (φ[3] + 3*π/2))
+            )**2
+            D2_K3 = norm * np.abs(
+                np.exp(1j * (φ[0])) + 
+                np.exp(1j * (φ[1] + π)) + 
+                np.exp(1j * (φ[2] + 3*π/2)) + 
+                np.exp(1j * (φ[3] + π/2))
+            )**2
+            kernel_maps[2, x, y] = D1_K3 - D2_K3
+
+    return bright_map, kernel_maps
+
 
 # Input fields ----------------------------------------------------------------
 

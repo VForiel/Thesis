@@ -171,3 +171,92 @@ def test_pf_is_quantity_and_length_matches_telescopes():
     assert pf.shape[0] == len(ctx.interferometer.telescopes)
     # Exact numeric value depends on instrumental parameters -> #TODO
 
+
+def test_get_analytical_transmission_maps_shapes():
+    """Test that `get_analytical_transmission_maps` returns arrays with correct shapes.
+    
+    The method should return:
+    - bright_map: (N, N) array for the bright output
+    - kernel_maps: (3, N, N) array for the 3 kernel outputs
+    """
+    ctx = Context.get_VLTI()
+    N = 20
+    bright_map, kernel_maps = ctx.get_analytical_transmission_maps(N=N)
+    
+    assert bright_map.shape == (N, N), f"Expected bright_map shape ({N}, {N}), got {bright_map.shape}"
+    assert kernel_maps.shape == (3, N, N), f"Expected kernel_maps shape (3, {N}, {N}), got {kernel_maps.shape}"
+
+
+def test_analytical_transmission_maps_physical_coherence():
+    """Test that analytical transmission maps produce physically coherent results.
+    
+    Physical expectations:
+    1. Bright output should be non-negative (intensity is always positive)
+    2. Kernel outputs should be antisymmetric (roughly zero mean since they are
+       differences of dark outputs)
+    3. No NaN or infinite values
+    """
+    ctx = Context.get_VLTI()
+    bright_map, kernel_maps = ctx.get_analytical_transmission_maps(N=30)
+    
+    # Check no NaN or inf
+    assert np.all(np.isfinite(bright_map)), "Bright map contains NaN or inf"
+    assert np.all(np.isfinite(kernel_maps)), "Kernel maps contain NaN or inf"
+    
+    # Bright output should be non-negative
+    assert np.all(bright_map >= 0), "Bright output should be non-negative"
+    
+    # Kernel outputs should have approximately zero mean (antisymmetric)
+    for i in range(3):
+        mean_abs = np.abs(kernel_maps[i].mean())
+        max_abs = np.abs(kernel_maps[i]).max()
+        # Mean should be much smaller than max (at least 1000x smaller)
+        assert mean_abs < max_abs / 1000, f"Kernel {i+1} is not antisymmetric: mean={mean_abs}, max={max_abs}"
+
+
+def test_analytical_vs_numerical_correlation():
+    """Test that analytical and numerical transmission maps are highly correlated.
+    
+    The analytical model is a simplified version of the numerical model. When
+    the numerical model has no manufacturing errors (σ=0) and no injected
+    phase shifts (φ=0), both models should produce the same transmission patterns
+    (differing only by a constant scaling factor).
+    """
+    ctx = Context.get_VLTI()
+    ctx.interferometer.chip.σ = np.zeros(14) * u.nm  # No manufacturing errors
+    ctx.interferometer.chip.φ = np.zeros(14) * u.nm  # No injected phase shifts
+    
+    N = 30
+    
+    # Get numerical transmission maps
+    raw_num, proc_num = ctx.get_transmission_maps(N=N)
+    
+    # Get analytical transmission maps
+    bright_ana, kernel_ana = ctx.get_analytical_transmission_maps(N=N)
+    
+    # Check correlation for bright output
+    corr_bright = np.corrcoef(raw_num[0].flatten(), bright_ana.flatten())[0, 1]
+    assert corr_bright > 0.99, f"Bright correlation too low: {corr_bright}"
+    
+    # Check correlation for kernel outputs
+    for i in range(3):
+        corr_kernel = np.corrcoef(proc_num[i].flatten(), kernel_ana[i].flatten())[0, 1]
+        assert corr_kernel > 0.99, f"Kernel {i+1} correlation too low: {corr_kernel}"
+
+
+def test_plot_analytical_transmission_maps_returns_bytes():
+    """Test that `plot_analytical_transmission_maps` with return_plot=True
+    returns a tuple of (PNG bytes, HTML string).
+    """
+    import matplotlib
+    matplotlib.use('Agg')  # Use non-interactive backend
+    
+    ctx = Context.get_VLTI()
+    result = ctx.plot_analytical_transmission_maps(N=20, return_plot=True)
+    
+    assert isinstance(result, tuple), "Should return a tuple"
+    assert len(result) == 2, "Should return (bytes, str)"
+    assert isinstance(result[0], bytes), "First element should be PNG bytes"
+    assert isinstance(result[1], str), "Second element should be HTML string"
+    assert len(result[0]) > 0, "PNG bytes should not be empty"
+
