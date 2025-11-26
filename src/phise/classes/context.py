@@ -1178,7 +1178,7 @@ def get_transmission_map_jit(
         output_order: np.ndarray[int],
         nb_raw_outputs: int,
         nb_processed_outputs: int,
-    ) -> tuple[np.ndarray[complex], np.ndarray[complex], np.ndarray[float]]:
+    ) -> tuple[np.ndarray[float], np.ndarray[float]]:
     """
     Generate the transmission maps of this context with a given resolution
 
@@ -1294,7 +1294,10 @@ def get_analytical_transmission_map_jit(
     bright_map = np.empty((N, N))
     kernel_maps = np.empty((3, N, N))
 
-    # Normalization factor: 1/4 for 4 telescopes, 1/7 for the number of outputs
+    # Normalization factor:
+    # - 1/4 for equal splitting among 4 telescopes (each telescope receives 1/4 of the input)
+    # - 1/7 for splitting among 7 outputs (1 bright + 6 dark outputs in the kernel nuller)
+    # This ensures the sum of all outputs equals the total input intensity.
     norm = 1.0 / 4.0 / 7.0
 
     for x in range(N):
@@ -1307,7 +1310,9 @@ def get_analytical_transmission_map_jit(
             # φᵢ = 2π · (pᵢ · sin(ρ)) / λ · projection_factor
             φ = np.empty(4)
             for i in range(4):
-                # Rotate projected telescope positions by parallactic angle
+                # Rotate projected telescope positions by the negative parallactic angle
+                # to transform from sky coordinates to baseline coordinates.
+                # This sign convention matches the numerical model in get_unique_source_input_fields_jit.
                 p_rot = p[i, 0] * np.cos(-θ) - p[i, 1] * np.sin(-θ)
                 # Compute phase delay
                 φ[i] = 2 * π * p_rot * np.sin(ρ) / λ
