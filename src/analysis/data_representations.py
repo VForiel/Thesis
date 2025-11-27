@@ -25,7 +25,7 @@ def get_B(Γ, α=1, β=1, φ1=0, φ2=π/3, φ3=π/4, φ4=π/6, n=10_000, ctx=Non
     σ4 = np.random.normal(0, Γ, n)
 
     # champs étoile
-    Bs = np.abs(np.sqrt(α/4/7) * (
+    Bs = np.abs(np.sqrt(α/4/4) * (
                  np.exp(1j*(σ1))
                + np.exp(1j*(σ2))
                + np.exp(1j*(σ3))
@@ -33,7 +33,7 @@ def get_B(Γ, α=1, β=1, φ1=0, φ2=π/3, φ3=π/4, φ4=π/6, n=10_000, ctx=Non
             ))**2
 
     # champs planète (avec phases relatives)
-    Bp = np.abs(np.sqrt(β/4/7) * (
+    Bp = np.abs(np.sqrt(β/4/4) * (
                  np.exp(1j*(σ1 + φ1))
                + np.exp(1j*(σ2 + φ2))
                + np.exp(1j*(σ3 + φ3))
@@ -55,26 +55,26 @@ def get_K1(Γ, α=1, β=1, φ1=0, φ2=π/3, φ3=π/4, φ4=π/6, n=10_000):
     σ4 = np.random.normal(0, Γ, n)
 
     # champs étoile
-    S1s = np.sqrt(α/4/7) * (
+    S1s = np.sqrt(α/4/6) * (
                  np.exp(1j*(        σ1))
                + np.exp(1j*(  π/2 + σ2))
                + np.exp(1j*(3*π/2 + σ3))
                + np.exp(1j*(  π   + σ4)))
 
-    S2s = np.sqrt(α/4/7) * (
+    S2s = np.sqrt(α/4/6) * (
                  np.exp(1j*(        σ1))
                + np.exp(1j*(3*π/2 + σ2))
                + np.exp(1j*(  π/2 + σ3))
                + np.exp(1j*(  π   + σ4)))
 
     # champs planète (avec phases relatives)
-    S1p = np.sqrt(β/4/7) * (
+    S1p = np.sqrt(β/4/6) * (
                  np.exp(1j*(        σ1 + φ1))
                + np.exp(1j*(  π/2 + σ2 + φ2))
                + np.exp(1j*(3*π/2 + σ3 + φ3))
                + np.exp(1j*(  π   + σ4 + φ4)))
 
-    S2p = np.sqrt(β/4/7) * (
+    S2p = np.sqrt(β/4/6) * (
                  np.exp(1j*(        σ1 + φ1))
                + np.exp(1j*(3*π/2 + σ2 + φ2))
                + np.exp(1j*(  π/2 + σ3 + φ3))
@@ -98,26 +98,26 @@ def get_K2(Γ, α=1, β=1, φ1=0, φ2=π/3, φ3=π/4, φ4=π/6, n=10_000):
     σ4 = np.random.normal(0, Γ, n)
 
     # champs étoile
-    S1s = np.sqrt(α/4/7) * (
+    S1s = np.sqrt(α/4/6) * (
                  np.exp(1j*(        σ1))
                + np.exp(1j*(  π/2 + σ2))
                + np.exp(1j*(  π   + σ3))
                + np.exp(1j*(3*π/2 + σ4)))
-
-    S2s = np.sqrt(α/4/7) * (
+    
+    S2s = np.sqrt(α/4/6) * (
                  np.exp(1j*(        σ1))
                + np.exp(1j*(3*π/2 + σ2))
                + np.exp(1j*(  π   + σ3))
                + np.exp(1j*(  π/2 + σ4)))
 
     # champs planète (avec phases relatives)
-    S1p = np.sqrt(β/4/7) * (
+    S1p = np.sqrt(β/4/6) * (
                  np.exp(1j*(        σ1 + φ1))
                + np.exp(1j*(  π/2 + σ2 + φ2))
                + np.exp(1j*(  π   + σ3 + φ3))
                + np.exp(1j*(3*π/2 + σ4 + φ4)))
 
-    S2p = np.sqrt(β/4/7) * (
+    S2p = np.sqrt(β/4/6) * (
                  np.exp(1j*(        σ1 + φ1))
                + np.exp(1j*(3*π/2 + σ2 + φ2))
                + np.exp(1j*(  π   + σ3 + φ3))
@@ -137,26 +137,26 @@ def get_K3(Γ, α=1, β=1, φ1=0, φ2=π/3, φ3=π/4, φ4=π/6, n=10_000):
     σ4 = np.random.normal(0, Γ, n)
 
     # champs étoile
-    S1s = np.sqrt(α/4/7) * (
+    S1s = np.sqrt(α/4/6) * (
                  np.exp(1j*(        σ1))
                + np.exp(1j*(  π   + σ2))
                + np.exp(1j*(  π/2 + σ3))
                + np.exp(1j*(3*π/2 + σ4)))
 
-    S2s = np.sqrt(α/4/7) * (
+    S2s = np.sqrt(α/4/6) * (
                  np.exp(1j*(        σ1))
                + np.exp(1j*(  π   + σ2))
                + np.exp(1j*(3*π/2 + σ3))
                + np.exp(1j*(  π/2 + σ4)))
 
     # champs planète (avec phases relatives)
-    S1p = np.sqrt(β/4/7) * (
+    S1p = np.sqrt(β/4/6) * (
                  np.exp(1j*(        σ1 + φ1))
                + np.exp(1j*(  π   + σ2 + φ2))
                + np.exp(1j*(  π/2 + σ3 + φ3))
                + np.exp(1j*(3*π/2 + σ4 + φ4)))
 
-    S2p = np.sqrt(β/4/7) * (
+    S2p = np.sqrt(β/4/6) * (
                  np.exp(1j*(        σ1 + φ1))
                + np.exp(1j*(  π   + σ2 + φ2))
                + np.exp(1j*(3*π/2 + σ3 + φ3))

@@ -1298,7 +1298,7 @@ def get_analytical_transmission_map_jit(
     # - 1/4 for equal splitting among 4 telescopes (each telescope receives 1/4 of the input)
     # - 1/7 for splitting among 7 outputs (1 bright + 6 dark outputs in the kernel nuller)
     # This ensures the sum of all outputs equals the total input intensity.
-    norm = 1.0 / 4.0 / 7.0
+    norm = 1.0 / 4.0
 
     for x in range(N):
         for y in range(N):
