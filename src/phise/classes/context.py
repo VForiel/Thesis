@@ -1294,11 +1294,12 @@ def get_analytical_transmission_map_jit(
     bright_map = np.empty((N, N))
     kernel_maps = np.empty((3, N, N))
 
-    # Normalization factor:
-    # - 1/4 for equal splitting among 4 telescopes (each telescope receives 1/4 of the input)
-    # - 1/7 for splitting among 7 outputs (1 bright + 6 dark outputs in the kernel nuller)
-    # This ensures the sum of all outputs equals the total input intensity.
-    norm = 1.0 / 4.0
+    # Normalization factors:
+    # For bright output: 1/4 (4 inputs) × 1/4 (energy conservation through combiner)
+    # For dark outputs: 1/4 (4 inputs) × 1/4 (bright combiner) × 1/4 (kernel combiner)
+    # These factors ensure proper energy conservation and match the numerical model.
+    norm_bright = 1.0 / 4.0 / 4.0
+    norm_dark = 1.0 / 4.0 / 4.0 / 4.0
 
     for x in range(N):
         for y in range(N):
@@ -1319,7 +1320,7 @@ def get_analytical_transmission_map_jit(
 
             # --- Bright output ---
             # All inputs combined with equal phases (constructive interference)
-            B = norm * np.abs(
+            B = norm_bright * np.abs(
                 np.exp(1j * φ[0]) + 
                 np.exp(1j * φ[1]) + 
                 np.exp(1j * φ[2]) + 
@@ -1331,13 +1332,13 @@ def get_analytical_transmission_map_jit(
             # Dark outputs from combining inputs with π/2 phase shifts
             # D1: phase shifts [0, π/2, 3π/2, π]
             # D2: phase shifts [0, 3π/2, π/2, π]
-            D1_K1 = norm * np.abs(
+            D1_K1 = norm_dark * np.abs(
                 np.exp(1j * (φ[0])) + 
                 np.exp(1j * (φ[1] + π/2)) + 
                 np.exp(1j * (φ[2] + 3*π/2)) + 
                 np.exp(1j * (φ[3] + π))
             )**2
-            D2_K1 = norm * np.abs(
+            D2_K1 = norm_dark * np.abs(
                 np.exp(1j * (φ[0])) + 
                 np.exp(1j * (φ[1] + 3*π/2)) + 
                 np.exp(1j * (φ[2] + π/2)) + 
@@ -1348,13 +1349,13 @@ def get_analytical_transmission_map_jit(
             # --- Kernel 2: baselines (1,3) and (2,4) ---
             # D1: phase shifts [0, π/2, π, 3π/2]
             # D2: phase shifts [0, 3π/2, π, π/2]
-            D1_K2 = norm * np.abs(
+            D1_K2 = norm_dark * np.abs(
                 np.exp(1j * (φ[0])) + 
                 np.exp(1j * (φ[1] + π/2)) + 
                 np.exp(1j * (φ[2] + π)) + 
                 np.exp(1j * (φ[3] + 3*π/2))
             )**2
-            D2_K2 = norm * np.abs(
+            D2_K2 = norm_dark * np.abs(
                 np.exp(1j * (φ[0])) + 
                 np.exp(1j * (φ[1] + 3*π/2)) + 
                 np.exp(1j * (φ[2] + π)) + 
@@ -1365,13 +1366,13 @@ def get_analytical_transmission_map_jit(
             # --- Kernel 3: baselines (1,2) and (3,4) ---
             # D1: phase shifts [0, π, π/2, 3π/2]
             # D2: phase shifts [0, π, 3π/2, π/2]
-            D1_K3 = norm * np.abs(
+            D1_K3 = norm_dark * np.abs(
                 np.exp(1j * (φ[0])) + 
                 np.exp(1j * (φ[1] + π)) + 
                 np.exp(1j * (φ[2] + π/2)) + 
                 np.exp(1j * (φ[3] + 3*π/2))
             )**2
-            D2_K3 = norm * np.abs(
+            D2_K3 = norm_dark * np.abs(
                 np.exp(1j * (φ[0])) + 
                 np.exp(1j * (φ[1] + π)) + 
                 np.exp(1j * (φ[2] + 3*π/2)) + 

@@ -24,27 +24,32 @@ def get_B(Γ, α=1, β=1, φ1=0, φ2=π/3, φ3=π/4, φ4=π/6, n=10_000, ctx=Non
     σ3 = np.random.normal(0, Γ, n)
     σ4 = np.random.normal(0, Γ, n)
 
-    # champs étoile
-    Bs = np.abs(np.sqrt(α/16) * (
+    # champs étoile (amplitude complexe)
+    Bs_amp = np.sqrt(α/4/4) * (
                  np.exp(1j*(σ1))
                + np.exp(1j*(σ2))
                + np.exp(1j*(σ3))
                + np.exp(1j*(σ4))
-            ))**2
+            )
 
-    # champs planète (avec phases relatives)
-    Bp = np.abs(np.sqrt(β/16) * (
+    # champs planète (amplitude complexe avec phases relatives)
+    Bp_amp = np.sqrt(β/4/4) * (
                  np.exp(1j*(σ1 + φ1))
                + np.exp(1j*(σ2 + φ2))
                + np.exp(1j*(σ3 + φ3))
                + np.exp(1j*(σ4 + φ4))
-            ))**2
+            )
+    
+    # Combine complex amplitudes first, then compute intensities
+    B = np.abs(Bs_amp)**2 + np.abs(Bp_amp)**2
+    Bs = np.abs(Bs_amp)**2
+    Bp = np.abs(Bp_amp)**2
     
     errors = np.array([σ1, σ2, σ3, σ4]).T # debug
     print(f"Analytical upstream piston errors (rad): {np.mean(errors):.3e} ± {np.std(errors):.3e}")
     print(f"Analytical upstream piston errors (nm): {np.mean(errors)/2/np.pi*ctx.interferometer.λ.to(u.nm):.3e} ± {np.std(errors)/2/np.pi*ctx.interferometer.λ.to(u.nm):.3e}")
 
-    return Bs, Bp, Bs + Bp
+    return Bs, Bp, B
     
 def get_K1(Γ, α=1, β=1, φ1=0, φ2=π/3, φ3=π/4, φ4=π/6, n=10_000):
 
@@ -55,26 +60,26 @@ def get_K1(Γ, α=1, β=1, φ1=0, φ2=π/3, φ3=π/4, φ4=π/6, n=10_000):
     σ4 = np.random.normal(0, Γ, n)
 
     # champs étoile
-    S1s = np.sqrt(α/16) * (
+    S1s = np.sqrt(α/4/4/4) * (
                  np.exp(1j*(        σ1))
                + np.exp(1j*(  π/2 + σ2))
                + np.exp(1j*(3*π/2 + σ3))
                + np.exp(1j*(  π   + σ4)))
 
-    S2s = np.sqrt(α/16) * (
+    S2s = np.sqrt(α/4/4/4) * (
                  np.exp(1j*(        σ1))
                + np.exp(1j*(3*π/2 + σ2))
                + np.exp(1j*(  π/2 + σ3))
                + np.exp(1j*(  π   + σ4)))
 
     # champs planète (avec phases relatives)
-    S1p = np.sqrt(β/16) * (
+    S1p = np.sqrt(β/4/4/4) * (
                  np.exp(1j*(        σ1 + φ1))
                + np.exp(1j*(  π/2 + σ2 + φ2))
                + np.exp(1j*(3*π/2 + σ3 + φ3))
                + np.exp(1j*(  π   + σ4 + φ4)))
 
-    S2p = np.sqrt(β/16) * (
+    S2p = np.sqrt(β/4/4/4) * (
                  np.exp(1j*(        σ1 + φ1))
                + np.exp(1j*(3*π/2 + σ2 + φ2))
                + np.exp(1j*(  π/2 + σ3 + φ3))
@@ -98,26 +103,26 @@ def get_K2(Γ, α=1, β=1, φ1=0, φ2=π/3, φ3=π/4, φ4=π/6, n=10_000):
     σ4 = np.random.normal(0, Γ, n)
 
     # champs étoile
-    S1s = np.sqrt(α/16) * (
+    S1s = np.sqrt(α/4/4/4) * (
                  np.exp(1j*(        σ1))
                + np.exp(1j*(  π/2 + σ2))
                + np.exp(1j*(  π   + σ3))
                + np.exp(1j*(3*π/2 + σ4)))
 
-    S2s = np.sqrt(α/16) * (
+    S2s = np.sqrt(α/4/4/4) * (
                  np.exp(1j*(        σ1))
                + np.exp(1j*(3*π/2 + σ2))
                + np.exp(1j*(  π   + σ3))
                + np.exp(1j*(  π/2 + σ4)))
 
     # champs planète (avec phases relatives)
-    S1p = np.sqrt(β/16) * (
+    S1p = np.sqrt(β/4/4/4) * (
                  np.exp(1j*(        σ1 + φ1))
                + np.exp(1j*(  π/2 + σ2 + φ2))
                + np.exp(1j*(  π   + σ3 + φ3))
                + np.exp(1j*(3*π/2 + σ4 + φ4)))
 
-    S2p = np.sqrt(β/16) * (
+    S2p = np.sqrt(β/4/4/4) * (
                  np.exp(1j*(        σ1 + φ1))
                + np.exp(1j*(3*π/2 + σ2 + φ2))
                + np.exp(1j*(  π   + σ3 + φ3))
@@ -137,26 +142,26 @@ def get_K3(Γ, α=1, β=1, φ1=0, φ2=π/3, φ3=π/4, φ4=π/6, n=10_000):
     σ4 = np.random.normal(0, Γ, n)
 
     # champs étoile
-    S1s = np.sqrt(α/16) * (
+    S1s = np.sqrt(α/4/4/4) * (
                  np.exp(1j*(        σ1))
                + np.exp(1j*(  π   + σ2))
                + np.exp(1j*(  π/2 + σ3))
                + np.exp(1j*(3*π/2 + σ4)))
 
-    S2s = np.sqrt(α/16) * (
+    S2s = np.sqrt(α/4/4/4) * (
                  np.exp(1j*(        σ1))
                + np.exp(1j*(  π   + σ2))
                + np.exp(1j*(3*π/2 + σ3))
                + np.exp(1j*(  π/2 + σ4)))
 
     # champs planète (avec phases relatives)
-    S1p = np.sqrt(β/16) * (
+    S1p = np.sqrt(β/4/4/4) * (
                  np.exp(1j*(        σ1 + φ1))
                + np.exp(1j*(  π   + σ2 + φ2))
                + np.exp(1j*(  π/2 + σ3 + φ3))
                + np.exp(1j*(3*π/2 + σ4 + φ4)))
 
-    S2p = np.sqrt(β/16) * (
+    S2p = np.sqrt(β/4/4/4) * (
                  np.exp(1j*(        σ1 + φ1))
                + np.exp(1j*(  π   + σ2 + φ2))
                + np.exp(1j*(3*π/2 + σ3 + φ3))
@@ -254,30 +259,62 @@ def instant_distribution(ctx: Context=None, n=10000, stat=np.median, figsize=(10
     analytical_data_so = np.empty((n,3))
     analytical_data_po = np.empty((n,3))
 
-    # Get parameters (amplitude and phases)
+    # Get parameters (amplitude and phases) for combined scenario
     ψi = ctx.get_input_fields()
     φ1, φ2, φ3, φ4 = np.angle(ψi[1])
-    # φ2=φ2-φ1; φ3=φ3-φ1; φ4=φ4-φ1
-    # φ1 = 0
     α = np.sum(ctx.pf).value
     β = α * ctx.target.companions[0].c
     Γ = ctx.Γ.to(u.nm).value / ctx.interferometer.λ.to(u.nm).value * 2 * np.pi
 
-    # Get kernels
-    analytical_brights_so, analytical_brights_po, analytical_brights = get_B(Γ=Γ, α=α, β=β, φ1=φ1, φ2=φ2, φ3=φ3, φ4=φ4, n=n, ctx=ctx)
+    # Get parameters for star-only scenario
+    α_so = np.sum(ctx_so.pf).value
+    β_so = 0  # No planet
 
-    tmp_so, tmp_po, tmp = get_K1(Γ=Γ, α=α, β=β, φ1=φ1, φ2=φ2, φ3=φ3, φ4=φ4, n=n)
-    analytical_data[:, 0] = tmp * r
-    analytical_data_so[:, 0] = tmp_so * r
-    analytical_data_po[:, 0] = tmp_po * r
-    tmp_so, tmp_po, tmp = get_K2(Γ=Γ,  α=α, β=β, φ1=φ1, φ2=φ2, φ3=φ3, φ4=φ4, n=n)
-    analytical_data[:, 1] = tmp * r
-    analytical_data_so[:, 1] = tmp_so * r
-    analytical_data_po[:, 1] = tmp_po * r
-    tmp_so, tmp_po, tmp = get_K3(Γ=Γ,  α=α, β=β, φ1=φ1, φ2=φ2, φ3=φ3, φ4=φ4, n=n)
-    analytical_data[:, 2] = tmp * r
-    analytical_data_so[:, 2] = tmp_so * r
-    analytical_data_po[:, 2] = tmp_po * r
+    # Get parameters for planet-only scenario (scaled)
+    α_po = np.sum(ctx_po.pf).value  # Star flux scaled down by 1e12
+    β_po = α_po * ctx_po.target.companions[0].c  # Planet flux scaled up by 1e12
+
+    # Get kernels for combined scenario (star + planet)
+    Bs_combined, Bp_combined, B_combined = get_B(Γ=Γ, α=α, β=β, φ1=φ1, φ2=φ2, φ3=φ3, φ4=φ4, n=n, ctx=ctx)
+    analytical_brights = B_combined
+
+    # Get kernels for star-only scenario
+    Bs_so, _, _ = get_B(Γ=Γ, α=α_so, β=β_so, φ1=φ1, φ2=φ2, φ3=φ3, φ4=φ4, n=n, ctx=ctx_so)
+    analytical_brights_so = Bs_so
+
+    # Get kernels for planet-only scenario
+    _, Bp_po, _ = get_B(Γ=Γ, α=α_po, β=β_po, φ1=φ1, φ2=φ2, φ3=φ3, φ4=φ4, n=n, ctx=ctx_po)
+    analytical_brights_po = Bp_po
+
+    # Kernel 1
+    Ks_combined, Kp_combined, K_combined = get_K1(Γ=Γ, α=α, β=β, φ1=φ1, φ2=φ2, φ3=φ3, φ4=φ4, n=n)
+    analytical_data[:, 0] = K_combined * r
+    
+    Ks_so, _, _ = get_K1(Γ=Γ, α=α_so, β=β_so, φ1=φ1, φ2=φ2, φ3=φ3, φ4=φ4, n=n)
+    analytical_data_so[:, 0] = Ks_so * r
+    
+    _, Kp_po, _ = get_K1(Γ=Γ, α=α_po, β=β_po, φ1=φ1, φ2=φ2, φ3=φ3, φ4=φ4, n=n)
+    analytical_data_po[:, 0] = Kp_po * r
+
+    # Kernel 2
+    Ks_combined, Kp_combined, K_combined = get_K2(Γ=Γ, α=α, β=β, φ1=φ1, φ2=φ2, φ3=φ3, φ4=φ4, n=n)
+    analytical_data[:, 1] = K_combined * r
+    
+    Ks_so, _, _ = get_K2(Γ=Γ, α=α_so, β=β_so, φ1=φ1, φ2=φ2, φ3=φ3, φ4=φ4, n=n)
+    analytical_data_so[:, 1] = Ks_so * r
+    
+    _, Kp_po, _ = get_K2(Γ=Γ, α=α_po, β=β_po, φ1=φ1, φ2=φ2, φ3=φ3, φ4=φ4, n=n)
+    analytical_data_po[:, 1] = Kp_po * r
+
+    # Kernel 3
+    Ks_combined, Kp_combined, K_combined = get_K3(Γ=Γ, α=α, β=β, φ1=φ1, φ2=φ2, φ3=φ3, φ4=φ4, n=n)
+    analytical_data[:, 2] = K_combined * r
+    
+    Ks_so, _, _ = get_K3(Γ=Γ, α=α_so, β=β_so, φ1=φ1, φ2=φ2, φ3=φ3, φ4=φ4, n=n)
+    analytical_data_so[:, 2] = Ks_so * r
+    
+    _, Kp_po, _ = get_K3(Γ=Γ, α=α_po, β=β_po, φ1=φ1, φ2=φ2, φ3=φ3, φ4=φ4, n=n)
+    analytical_data_po[:, 2] = Kp_po * r
 
     # Debug info --------------------------------------------------------------
 
