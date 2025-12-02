@@ -342,106 +342,7 @@ class Context:
 
         return get_transmission_map_jit(N=N, φ=φ, σ=σ, p=p, λ=λ, λ0=λ0, fov=fov, output_order=output_order, nb_raw_outputs=nb_raw_outputs, nb_processed_outputs=nb_processed_outputs)
 
-    # Analytical transmission maps --------------------------------------------
 
-    def get_analytical_transmission_maps(self, N:int) -> np.ndarray[float]:
-        """Generate analytical kernel nuller transmission maps at a given resolution.
-
-        This method uses a simplified analytical model that expresses the kernel
-        outputs directly as a function of input phases, bypassing the full photonic
-        chip simulation. The analytical model assumes ideal phase relationships
-        (0, π/2, π, 3π/2) from the MMI combiners.
-
-        The analytical model is faster than the numerical model and provides
-        insight into the fundamental transmission patterns, but does not account
-        for wavelength-dependent effects, manufacturing errors (σ), or injected
-        phase shifts (φ).
-
-        Physics:
-            For a 4-telescope kernel nuller, the input phases are determined by
-            the projected baselines and source position:
-            φᵢ = 2π · (pᵢ · sin(ρ)) / λ · cos(θ - θᵢ)
-            
-            The kernel outputs are computed from differences of dark outputs:
-            Kₙ = |D₂ₙ₋₁|² - |D₂ₙ|²
-            
-            where the dark outputs combine inputs with fixed phase shifts from
-            the MMI combiners.
-
-        Args:
-            N (int): Map resolution (N×N pixels).
-
-        Returns:
-            tuple[np.ndarray[float], np.ndarray[float]]:
-                - bright_map: Bright output transmission map (N×N)
-                - kernel_maps: Kernel outputs transmission maps (3×N×N)
-        """
-
-        p = self.p.value  # Projected telescope positions [m]
-        λ = self.interferometer.λ.to(u.m).value  # Wavelength [m]
-        fov = self.interferometer.fov  # Field of view [mas]
-
-        return get_analytical_transmission_map_jit(N=N, p=p, λ=λ, fov=fov)
-
-    def plot_analytical_transmission_maps(self, N:int, return_plot:bool = False) -> None:
-        """Plot the analytical transmission maps of the kernel nuller.
-
-        This method visualizes the transmission maps computed using the simplified
-        analytical model. The analytical model provides faster computation and
-        clearer insight into the fundamental transmission patterns.
-
-        Args:
-            N (int): Map resolution (N×N pixels).
-            return_plot (bool): If True, return plot as PNG bytes and HTML text
-                instead of displaying.
-
-        Returns:
-            None or tuple[bytes, str]: If return_plot is True, returns (PNG bytes, HTML string).
-        """
-
-        # Get analytical transmission maps
-        bright_map, kernel_maps = self.get_analytical_transmission_maps(N=N)
-
-        # Get companions position to plot them
-        companions_pos = []
-        for c in self.target.companions:
-            x, y = coordinates.ρθ_to_xy(ρ=c.ρ, θ=c.θ, fov=self.interferometer.fov)
-            companions_pos.append((x*self.interferometer.fov/2, y*self.interferometer.fov/2))
-
-        nb_kernels = 3
-        _, axs = plt.subplots(1, 4, figsize=(5*4, 5))
-
-        fov = self.interferometer.fov
-        extent = (-fov.value/2, fov.value/2, -fov.value/2, fov.value/2)
-
-        # Plot bright output
-        im = axs[0].imshow(bright_map, aspect="equal", cmap="hot", extent=extent)
-        axs[0].set_title("Bright (analytical)")
-        plt.colorbar(im, ax=axs[0])
-        axs[0].set_xlabel(r"$\theta_x$" + f" ({fov.unit})")
-        axs[0].set_ylabel(r"$\theta_y$" + f" ({fov.unit})")
-        axs[0].scatter(0, 0, color="yellow", marker="*", edgecolors="black", s=100)
-        for x, y in companions_pos:
-            axs[0].scatter(x, y, color="blue", edgecolors="black")
-
-        # Plot kernel outputs
-        for i in range(nb_kernels):
-            im = axs[i+1].imshow(kernel_maps[i], aspect="equal", cmap="bwr", extent=extent)
-            axs[i+1].set_title(f"Kernel {i+1} (analytical)")
-            plt.colorbar(im, ax=axs[i+1])
-            axs[i+1].set_xlabel(r"$\theta_x$" + f" ({fov.unit})")
-            axs[i+1].set_ylabel(r"$\theta_y$" + f" ({fov.unit})")
-            axs[i+1].scatter(0, 0, color="yellow", marker="*", edgecolors="black", s=100)
-            for x, y in companions_pos:
-                axs[i+1].scatter(x, y, color="blue", edgecolors="black")
-
-        if return_plot:
-            plot = BytesIO()
-            plt.savefig(plot, format='png')
-            plt.close()
-            transmissions = "<p>Analytical transmission maps</p>"
-            return plot.getvalue(), transmissions
-        plt.show()
 
     # Get transmission map gradiant norm --------------------------------------
 
@@ -673,11 +574,14 @@ class Context:
             ctx_mono = copy(self)
             ctx_mono.interferometer.λ = λ
             ctx_mono.interferometer.Δλ = 1 * u.nm
+            ctx_mono._update_pf()
 
             outs[i] = ctx_mono.observe_monochromatic(upstream_pistons=Δφ)
 
         # Integrate over the bandwidth
-        return np.trapz(outs, λ_range.value, axis=0)
+        # outs contains counts for a 1 nm bandwidth (ctx_mono.interferometer.Δλ)
+        # We integrate the spectral density (outs / 1 nm) over the wavelength range (in nm)
+        return np.trapz(outs, λ_range.to(u.nm).value, axis=0) / 1.0
 
     def observation_serie(
             self,

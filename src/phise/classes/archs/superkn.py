@@ -384,6 +384,21 @@ class SuperKN(Chip):
         ψ *= np.exp(-1j * 2 * np.pi * self.input_opd.to(λ.unit).value / λ.value)
         return get_output_fields_jit(ψ=ψ, φ=φ, σ=σ, λ=λ.value, λ0=λ0, output_order=self.output_order)
     
+    def expected_outputs(self, ψ: np.ndarray[complex]) -> tuple[float, np.ndarray[float], np.ndarray[float]]:
+        """
+        Compute expected outputs from input fields using analytical model.
+        
+        Args:
+            ψ (np.ndarray[complex]): Input complex fields for the 4 channels (shape (4,)).
+        
+        Returns:
+            tuple:
+                - bright (float): Bright output intensity.
+                - darks (np.ndarray[float]): Dark outputs intensities (shape (6,)).
+                - kernels (np.ndarray[float]): Kernel outputs intensities (shape (3,)).
+        """
+        return expected_outputs_jit(ψ)
+
     def process_outputs(self, out: np.ndarray[float]) -> np.ndarray[float]:
         """
         Compute processed kernel outputs from raw output intensities.
@@ -413,32 +428,38 @@ class SuperKN(Chip):
         ψ2 = np.array([0, ψ[1], 0, 0])
         ψ3 = np.array([0, 0, ψ[2], 0])
         ψ4 = np.array([0, 0, 0, ψ[3]])
+
         out1 = self.get_output_fields(ψ1, λ)
         out2 = self.get_output_fields(ψ2, λ)
         out3 = self.get_output_fields(ψ3, λ)
         out4 = self.get_output_fields(ψ4, λ)
 
-        out2 = np.abs(out2[0]) * np.exp(1j * (np.angle(out2[0]) - np.angle(out1[0])))
-        out3 = np.abs(out3[0]) * np.exp(1j * (np.angle(out3[0]) - np.angle(out1[0])))
-        out4 = np.abs(out4[0]) * np.exp(1j * (np.angle(out4[0]) - np.angle(out1[0])))
-        out1 = np.abs(out1) * np.exp(1j * 0)
-
+        # Normalize out1 so its first element (Bright) has phase 0
+        if len(out1) > 0:
+             ref_phase = np.angle(out1[0])
+             out1 = out1 * np.exp(-1j * ref_phase)
+        
         n_out = len(out1)
         outs = np.array([out1, out2, out3, out4])
 
         _, axs = plt.subplots(n_out, 1, figsize=(5, 5*n_out), subplot_kw={'projection': 'polar'})
-        for i in range(len(out1)):
+        
+        if n_out == 1:
+            axs = [axs]
 
+        for i in range(n_out):
             colors = ['yellow', 'green', 'red', 'blue']
             for j, out in enumerate(outs):
-
-                axs[j].scatter(np.angle(out), np.abs(out), color=colors[j], label=f'Input {j + 1}', alpha=0.5)
-                axs[j].plot([0, np.angle(out)], [0, np.abs(out)**2], color=colors[j], alpha=0.5)
+                val = out[i]
+                axs[i].scatter(np.angle(val), np.abs(val), color=colors[j], label=f'Input {j + 1}', alpha=0.5)
+                axs[i].plot([0, np.angle(val)], [0, np.abs(val)**2], color=colors[j], alpha=0.5)
+            
+            axs[i].set_title(f'{self._raw_output_labels[i]} output')
 
         m = np.max(np.abs(outs)**2)
-        for i, ax in enumerate(axs.flatten()):
+        for ax in axs:
             ax.set_ylim(0, m)
-            ax.set_title(f'{self._raw_output_labels[i]} output')
+        
         axs[0].legend()
         if not plot:
             plot = BytesIO()
@@ -547,3 +568,54 @@ def process_outputs_jit(out: np.ndarray[complex]) -> np.ndarray[float]:
     k2 = out[3] - out[4]
     k3 = out[5] - out[6]
     return np.array([k1, k2, k3], dtype=np.float64)
+
+@nb.njit()
+def expected_outputs_jit(ψ: np.ndarray[complex]) -> tuple[float, np.ndarray[float], np.ndarray[float]]:
+    """
+    Compute expected outputs from input fields using analytical model (JIT compiled).
+    
+    Args:
+        ψ (np.ndarray[complex]): Input complex fields for the 4 channels.
+        
+    Returns:
+        tuple: (bright, darks, kernels)
+    """
+    # Bright output (constructive interference)
+    # Factor 1/2 for amplitude (1/4 for intensity) relative to input sum
+    S_b = 0.5 * (ψ[0] + ψ[1] + ψ[2] + ψ[3])
+    bright = np.abs(S_b)**2
+    
+    # Dark outputs
+    # Factor 1/4 for amplitude (1/16 for intensity)
+    
+    # Kernel 1
+    # S1s: 0, pi/2, 3pi/2, pi
+    S1_1 = 0.25 * (ψ[0] + 1j*ψ[1] - 1j*ψ[2] - ψ[3])
+    # S2s: 0, 3pi/2, pi/2, pi
+    S1_2 = 0.25 * (ψ[0] - 1j*ψ[1] + 1j*ψ[2] - ψ[3])
+    
+    # Kernel 2
+    # S1s: 0, pi/2, pi, 3pi/2
+    S2_1 = 0.25 * (ψ[0] + 1j*ψ[1] - ψ[2] - 1j*ψ[3])
+    # S2s: 0, 3pi/2, pi, pi/2
+    S2_2 = 0.25 * (ψ[0] - 1j*ψ[1] - ψ[2] + 1j*ψ[3])
+    
+    # Kernel 3
+    # S1s: 0, pi, pi/2, 3pi/2
+    S3_1 = 0.25 * (ψ[0] - ψ[1] + 1j*ψ[2] - 1j*ψ[3])
+    # S2s: 0, pi, 3pi/2, pi/2
+    S3_2 = 0.25 * (ψ[0] - ψ[1] - 1j*ψ[2] + 1j*ψ[3])
+    
+    darks = np.array([
+        np.abs(S1_1)**2, np.abs(S1_2)**2,
+        np.abs(S2_1)**2, np.abs(S2_2)**2,
+        np.abs(S3_1)**2, np.abs(S3_2)**2
+    ])
+    
+    kernels = np.array([
+        darks[0] - darks[1],
+        darks[2] - darks[3],
+        darks[4] - darks[5]
+    ])
+    
+    return bright, darks, kernels
