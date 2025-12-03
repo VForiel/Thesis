@@ -102,20 +102,31 @@ class Interferometer:
         """
         return (self._Δλ * u.nm).to(self._Δλ_unit)
 
+    # Set bandwidth
     @Δλ.setter
     def Δλ(self, Δλ: u.Quantity):
+
+        # Check if it's a quantity
         if not isinstance(Δλ, u.Quantity):
             raise TypeError('Δλ must be an astropy Quantity')
+
+        # Convert to nanometers
         try:
             new_Δλ = Δλ.to(u.nm).value
         except u.UnitConversionError:
             raise ValueError('Δλ must be in nanometers')
+
+        # Ensure it's positive
         if new_Δλ <= 0:
             raise ValueError('Δλ must be positive')
-        if self.parent_ctx is not None:
-            self.parent_ctx._update_pf()
+
+        # Update internal state
         self._Δλ = new_Δλ
         self._Δλ_unit = Δλ.unit
+
+        # Update parent context if it exists
+        if self.parent_ctx is not None:
+            self.parent_ctx._update_pf()
 
     @property
     def fov(self) -> u.Quantity:

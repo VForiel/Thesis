@@ -610,7 +610,7 @@ def expected_outputs_jit(ψ: np.ndarray[complex]) -> tuple[float, np.ndarray[flo
         np.abs(S1_1)**2, np.abs(S1_2)**2,
         np.abs(S2_1)**2, np.abs(S2_2)**2,
         np.abs(S3_1)**2, np.abs(S3_2)**2
-    ])
+    ]) * 2.0
     
     kernels = np.array([
         darks[0] - darks[1],

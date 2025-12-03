@@ -458,6 +458,109 @@ class Context:
         plt.show()
         print(transmissions)
 
+    def plot_analytical_transmission_maps(self, N:int, return_plot:bool = False) -> None:
+        """Plot the analytical transmission maps (Bright + 6 Darks + 3 Kernels).
+
+        Args:
+            N (int): Map resolution.
+            return_plot (bool): If True, return the plot as bytes instead of showing it.
+        """
+        
+        # Get analytical maps
+        p = self.p.value
+        λ = self.interferometer.λ.to(u.m).value
+        fov = self.interferometer.fov
+        
+        bright_map, dark_maps, kernel_maps = get_analytical_transmission_map_jit(N=N, p=p, λ=λ, fov=fov)
+
+        # Get companions position to plot them
+        companions_pos = []
+        for c in self.target.companions:
+            x, y = coordinates.ρθ_to_xy(ρ=c.ρ, θ=c.θ, fov=self.interferometer.fov)
+            companions_pos.append((x*self.interferometer.fov/2, y*self.interferometer.fov/2))
+
+        # Plotting
+        # 2 rows, 5 columns
+        # Row 1: Bright, D1, D2, D3, D4
+        # Row 2: D5, D6, K1, K2, K3
+        _, axs = plt.subplots(2, 5, figsize=(25, 10))
+        
+        fov_val = fov.value
+        extent = (-fov_val/2, fov_val/2, -fov_val/2, fov_val/2)
+        
+        labels = [
+            "Bright", "Dark 1", "Dark 2", "Dark 3", "Dark 4",
+            "Dark 5", "Dark 6", "Kernel 1", "Kernel 2", "Kernel 3"
+        ]
+        maps = [
+            bright_map, dark_maps[0], dark_maps[1], dark_maps[2], dark_maps[3],
+            dark_maps[4], dark_maps[5], kernel_maps[0], kernel_maps[1], kernel_maps[2]
+        ]
+        cmaps = ["hot"] + ["gray"]*6 + ["bwr"]*3
+
+        for i in range(10):
+            row = i // 5
+            col = i % 5
+            ax = axs[row, col]
+            
+            im = ax.imshow(maps[i], aspect="equal", cmap=cmaps[i], extent=extent)
+            ax.set_title(labels[i])
+            plt.colorbar(im, ax=ax)
+            
+            ax.set_xlabel(r"$\theta_x$" + f" ({fov.unit})")
+            ax.set_ylabel(r"$\theta_y$" + f" ({fov.unit})")
+            
+            # Plot star and companions
+            ax.scatter(0, 0, color="yellow", marker="*", edgecolors="black", s=100)
+            for x, y in companions_pos:
+                ax.scatter(x, y, color="blue", edgecolors="black")
+
+        # Throughputs calculation and printing
+        transmissions = ""
+        companions = [Companion(name=self.target.name + " Star", c=1, θ=0*u.deg, ρ=0*u.mas)] + self.target.companions
+        
+        for c in companions:
+            θ = c.θ.to(u.rad).value
+            ρ = c.ρ.to(u.rad).value
+            
+            # Compute analytical input fields
+            # φᵢ = 2π · (pᵢ · sin(ρ)) / λ · projection_factor
+            φ = np.empty(4)
+            for i in range(4):
+                p_rot = p[i, 0] * np.cos(-θ) - p[i, 1] * np.sin(-θ)
+                φ[i] = 2 * np.pi * p_rot * np.sin(ρ) / λ
+                
+            ψ = np.empty(4, dtype=np.complex128)
+            for i in range(4):
+                ψ[i] = 0.5 * np.exp(1j * φ[i])
+                
+            b, d, k = superkn.expected_outputs_jit(ψ)
+            
+            linebreak = '<br>' if return_plot else '\n   '
+            transmissions += '<h2>' if return_plot else ''
+            transmissions += f"\n{c.name} analytical throughputs:"
+            transmissions += '</h1>' if return_plot else '\n----------' + linebreak
+            
+            # Bright
+            transmissions += f"Bright: {b*100:.2f}%" + linebreak
+            
+            # Darks
+            d_str = ", ".join([f"D{i+1}: {val*100:.2f}%" for i, val in enumerate(d)])
+            transmissions += d_str + linebreak
+            
+            # Kernels
+            k_str = ", ".join([f"K{i+1}: {val*100:.2f}%" for i, val in enumerate(k)])
+            transmissions += k_str + linebreak
+
+        if return_plot:
+            plot = BytesIO()
+            plt.savefig(plot, format='png')
+            plt.close()
+            return plot.getvalue(), transmissions
+        
+        plt.show()
+        print(transmissions)
+
     # Input fields ------------------------------------------------------------
 
     def get_input_fields(self) -> np.ndarray[complex]:
@@ -1196,14 +1299,8 @@ def get_analytical_transmission_map_jit(
 
     # Initialize output arrays
     bright_map = np.empty((N, N))
+    dark_maps = np.empty((6, N, N))
     kernel_maps = np.empty((3, N, N))
-
-    # Normalization factors:
-    # For bright output: 1/4 (4 inputs) × 1/4 (energy conservation through combiner)
-    # For dark outputs: 1/4 (4 inputs) × 1/4 (bright combiner) × 1/4 (kernel combiner)
-    # These factors ensure proper energy conservation and match the numerical model.
-    norm_bright = 1.0 / 4.0 / 4.0
-    norm_dark = 1.0 / 4.0 / 4.0 / 4.0
 
     for x in range(N):
         for y in range(N):
@@ -1222,69 +1319,22 @@ def get_analytical_transmission_map_jit(
                 # Compute phase delay
                 φ[i] = 2 * π * p_rot * np.sin(ρ) / λ
 
-            # --- Bright output ---
-            # All inputs combined with equal phases (constructive interference)
-            B = norm_bright * np.abs(
-                np.exp(1j * φ[0]) + 
-                np.exp(1j * φ[1]) + 
-                np.exp(1j * φ[2]) + 
-                np.exp(1j * φ[3])
-            )**2
-            bright_map[x, y] = B
+            # Construct input fields with amplitude 0.5 to match normalization
+            # (0.5 amplitude -> 0.25 intensity factor in bright output calculation which has 0.5 prefactor -> 0.5*0.5 = 0.25 amplitude -> 0.0625 intensity = 1/16)
+            ψ = np.empty(4, dtype=np.complex128)
+            for i in range(4):
+                ψ[i] = 0.5 * np.exp(1j * φ[i])
 
-            # --- Kernel 1: baselines (1,4) and (2,3) ---
-            # Dark outputs from combining inputs with π/2 phase shifts
-            # D1: phase shifts [0, π/2, 3π/2, π]
-            # D2: phase shifts [0, 3π/2, π/2, π]
-            D1_K1 = norm_dark * np.abs(
-                np.exp(1j * (φ[0])) + 
-                np.exp(1j * (φ[1] + π/2)) + 
-                np.exp(1j * (φ[2] + 3*π/2)) + 
-                np.exp(1j * (φ[3] + π))
-            )**2
-            D2_K1 = norm_dark * np.abs(
-                np.exp(1j * (φ[0])) + 
-                np.exp(1j * (φ[1] + 3*π/2)) + 
-                np.exp(1j * (φ[2] + π/2)) + 
-                np.exp(1j * (φ[3] + π))
-            )**2
-            kernel_maps[0, x, y] = D1_K1 - D2_K1
+            # Get expected outputs using the shared analytical model
+            b, d, k = superkn.expected_outputs_jit(ψ)
 
-            # --- Kernel 2: baselines (1,3) and (2,4) ---
-            # D1: phase shifts [0, π/2, π, 3π/2]
-            # D2: phase shifts [0, 3π/2, π, π/2]
-            D1_K2 = norm_dark * np.abs(
-                np.exp(1j * (φ[0])) + 
-                np.exp(1j * (φ[1] + π/2)) + 
-                np.exp(1j * (φ[2] + π)) + 
-                np.exp(1j * (φ[3] + 3*π/2))
-            )**2
-            D2_K2 = norm_dark * np.abs(
-                np.exp(1j * (φ[0])) + 
-                np.exp(1j * (φ[1] + 3*π/2)) + 
-                np.exp(1j * (φ[2] + π)) + 
-                np.exp(1j * (φ[3] + π/2))
-            )**2
-            kernel_maps[1, x, y] = D1_K2 - D2_K2
+            bright_map[x, y] = b
+            dark_maps[:, x, y] = d
+            kernel_maps[:, x, y] = k
 
-            # --- Kernel 3: baselines (1,2) and (3,4) ---
-            # D1: phase shifts [0, π, π/2, 3π/2]
-            # D2: phase shifts [0, π, 3π/2, π/2]
-            D1_K3 = norm_dark * np.abs(
-                np.exp(1j * (φ[0])) + 
-                np.exp(1j * (φ[1] + π)) + 
-                np.exp(1j * (φ[2] + π/2)) + 
-                np.exp(1j * (φ[3] + 3*π/2))
-            )**2
-            D2_K3 = norm_dark * np.abs(
-                np.exp(1j * (φ[0])) + 
-                np.exp(1j * (φ[1] + π)) + 
-                np.exp(1j * (φ[2] + 3*π/2)) + 
-                np.exp(1j * (φ[3] + π/2))
-            )**2
-            kernel_maps[2, x, y] = D1_K3 - D2_K3
+    return bright_map, dark_maps, kernel_maps
 
-    return bright_map, kernel_maps
+
 
 
 # Input fields ----------------------------------------------------------------
