@@ -342,6 +342,8 @@ class Context:
 
         return get_transmission_map_jit(N=N, φ=φ, σ=σ, p=p, λ=λ, λ0=λ0, fov=fov, output_order=output_order, nb_raw_outputs=nb_raw_outputs, nb_processed_outputs=nb_processed_outputs)
 
+
+
     # Get transmission map gradiant norm --------------------------------------
 
     def get_transmission_map_gradient_norm(self, N:int) -> np.ndarray[float]:
@@ -453,6 +455,109 @@ class Context:
             plt.savefig(plot, format='png')
             plt.close()
             return plot.getvalue(), transmissions
+        plt.show()
+        print(transmissions)
+
+    def plot_analytical_transmission_maps(self, N:int, return_plot:bool = False) -> None:
+        """Plot the analytical transmission maps (Bright + 6 Darks + 3 Kernels).
+
+        Args:
+            N (int): Map resolution.
+            return_plot (bool): If True, return the plot as bytes instead of showing it.
+        """
+        
+        # Get analytical maps
+        p = self.p.value
+        λ = self.interferometer.λ.to(u.m).value
+        fov = self.interferometer.fov
+        
+        bright_map, dark_maps, kernel_maps = get_analytical_transmission_map_jit(N=N, p=p, λ=λ, fov=fov)
+
+        # Get companions position to plot them
+        companions_pos = []
+        for c in self.target.companions:
+            x, y = coordinates.ρθ_to_xy(ρ=c.ρ, θ=c.θ, fov=self.interferometer.fov)
+            companions_pos.append((x*self.interferometer.fov/2, y*self.interferometer.fov/2))
+
+        # Plotting
+        # 2 rows, 5 columns
+        # Row 1: Bright, D1, D2, D3, D4
+        # Row 2: D5, D6, K1, K2, K3
+        _, axs = plt.subplots(2, 5, figsize=(25, 10))
+        
+        fov_val = fov.value
+        extent = (-fov_val/2, fov_val/2, -fov_val/2, fov_val/2)
+        
+        labels = [
+            "Bright", "Dark 1", "Dark 2", "Dark 3", "Dark 4",
+            "Dark 5", "Dark 6", "Kernel 1", "Kernel 2", "Kernel 3"
+        ]
+        maps = [
+            bright_map, dark_maps[0], dark_maps[1], dark_maps[2], dark_maps[3],
+            dark_maps[4], dark_maps[5], kernel_maps[0], kernel_maps[1], kernel_maps[2]
+        ]
+        cmaps = ["hot"] + ["gray"]*6 + ["bwr"]*3
+
+        for i in range(10):
+            row = i // 5
+            col = i % 5
+            ax = axs[row, col]
+            
+            im = ax.imshow(maps[i], aspect="equal", cmap=cmaps[i], extent=extent)
+            ax.set_title(labels[i])
+            plt.colorbar(im, ax=ax)
+            
+            ax.set_xlabel(r"$\theta_x$" + f" ({fov.unit})")
+            ax.set_ylabel(r"$\theta_y$" + f" ({fov.unit})")
+            
+            # Plot star and companions
+            ax.scatter(0, 0, color="yellow", marker="*", edgecolors="black", s=100)
+            for x, y in companions_pos:
+                ax.scatter(x, y, color="blue", edgecolors="black")
+
+        # Throughputs calculation and printing
+        transmissions = ""
+        companions = [Companion(name=self.target.name + " Star", c=1, θ=0*u.deg, ρ=0*u.mas)] + self.target.companions
+        
+        for c in companions:
+            θ = c.θ.to(u.rad).value
+            ρ = c.ρ.to(u.rad).value
+            
+            # Compute analytical input fields
+            # φᵢ = 2π · (pᵢ · sin(ρ)) / λ · projection_factor
+            φ = np.empty(4)
+            for i in range(4):
+                p_rot = p[i, 0] * np.cos(-θ) - p[i, 1] * np.sin(-θ)
+                φ[i] = 2 * np.pi * p_rot * np.sin(ρ) / λ
+                
+            ψ = np.empty(4, dtype=np.complex128)
+            for i in range(4):
+                ψ[i] = 0.5 * np.exp(1j * φ[i])
+                
+            b, d, k = superkn.expected_outputs_jit(ψ)
+            
+            linebreak = '<br>' if return_plot else '\n   '
+            transmissions += '<h2>' if return_plot else ''
+            transmissions += f"\n{c.name} analytical throughputs:"
+            transmissions += '</h1>' if return_plot else '\n----------' + linebreak
+            
+            # Bright
+            transmissions += f"Bright: {b*100:.2f}%" + linebreak
+            
+            # Darks
+            d_str = ", ".join([f"D{i+1}: {val*100:.2f}%" for i, val in enumerate(d)])
+            transmissions += d_str + linebreak
+            
+            # Kernels
+            k_str = ", ".join([f"K{i+1}: {val*100:.2f}%" for i, val in enumerate(k)])
+            transmissions += k_str + linebreak
+
+        if return_plot:
+            plot = BytesIO()
+            plt.savefig(plot, format='png')
+            plt.close()
+            return plot.getvalue(), transmissions
+        
         plt.show()
         print(transmissions)
 
@@ -572,11 +677,14 @@ class Context:
             ctx_mono = copy(self)
             ctx_mono.interferometer.λ = λ
             ctx_mono.interferometer.Δλ = 1 * u.nm
+            ctx_mono._update_pf()
 
             outs[i] = ctx_mono.observe_monochromatic(upstream_pistons=Δφ)
 
         # Integrate over the bandwidth
-        return np.trapz(outs, λ_range.value, axis=0)
+        # outs contains counts for a 1 nm bandwidth (ctx_mono.interferometer.Δλ)
+        # We integrate the spectral density (outs / 1 nm) over the wavelength range (in nm)
+        return np.trapz(outs, λ_range.to(u.nm).value, axis=0) / 1.0
 
     def observation_serie(
             self,
@@ -1077,7 +1185,7 @@ def get_transmission_map_jit(
         output_order: np.ndarray[int],
         nb_raw_outputs: int,
         nb_processed_outputs: int,
-    ) -> tuple[np.ndarray[complex], np.ndarray[complex], np.ndarray[float]]:
+    ) -> tuple[np.ndarray[float], np.ndarray[float]]:
     """
     Generate the transmission maps of this context with a given resolution
 
@@ -1127,6 +1235,107 @@ def get_transmission_map_jit(
                     processed_out_maps[i, x, y] = processed_outs[i]
 
     return raw_out_maps, processed_out_maps
+
+
+# Analytical transmission maps ------------------------------------------------
+
+@nb.njit()
+def get_analytical_transmission_map_jit(
+        N: int,
+        p: np.ndarray[float],
+        λ: float,
+        fov: float,
+    ) -> tuple[np.ndarray[float], np.ndarray[float]]:
+    """Generate analytical transmission maps using simplified closed-form expressions.
+
+    This function computes the transmission maps of a 4-telescope kernel nuller
+    using an analytical model that directly expresses the outputs as functions
+    of the input phases. The model assumes ideal MMI phase relationships and
+    does not include manufacturing errors or injected phase shifts.
+
+    The analytical model provides insight into the fundamental transmission patterns
+    and is computationally faster than the full numerical simulation.
+
+    Physics Background:
+        The kernel nuller combines light from 4 telescopes through a series of
+        beam combiners. For an ideal chip at the design wavelength:
+        
+        1. Bright output: All inputs combined constructively
+           B = |ψ₁ + ψ₂ + ψ₃ + ψ₄|² / 4
+        
+        2. Dark outputs: Inputs combined with π/2 phase shifts
+           The chip architecture creates pairs of dark outputs where the
+           differences (kernels) are insensitive to symmetric aberrations.
+        
+        3. Kernel outputs: K_n = |D_{2n-1}|² - |D_{2n}|²
+           These are the differences between paired dark outputs.
+
+    Parameters
+    ----------
+    N : int
+        Resolution of the map (N×N pixels).
+    p : np.ndarray[float]
+        Projected telescope positions (4, 2) in meters.
+    λ : float
+        Wavelength in meters.
+    fov : float
+        Field of view in mas (milliarcseconds).
+
+    Returns
+    -------
+    bright_map : np.ndarray[float]
+        Bright output transmission map (N×N).
+    kernel_maps : np.ndarray[float]
+        Kernel outputs transmission maps (3×N×N).
+    """
+
+    π = np.pi
+
+    # Get the coordinates of the map
+    _, _, θ_map, ρ_map = coordinates.get_maps_jit(N=N, fov=fov)
+
+    # Convert mas to radians
+    ρ_map = ρ_map / 1000 / 3600 / 180 * π
+
+    # Initialize output arrays
+    bright_map = np.empty((N, N))
+    dark_maps = np.empty((6, N, N))
+    kernel_maps = np.empty((3, N, N))
+
+    for x in range(N):
+        for y in range(N):
+            
+            θ = θ_map[x, y]  # Position angle [rad]
+            ρ = ρ_map[x, y]  # Angular separation [rad]
+
+            # Compute input phases from source position
+            # φᵢ = 2π · (pᵢ · sin(ρ)) / λ · projection_factor
+            φ = np.empty(4)
+            for i in range(4):
+                # Rotate projected telescope positions by the negative parallactic angle
+                # to transform from sky coordinates to baseline coordinates.
+                # This sign convention matches the numerical model in get_unique_source_input_fields_jit.
+                p_rot = p[i, 0] * np.cos(-θ) - p[i, 1] * np.sin(-θ)
+                # Compute phase delay
+                φ[i] = 2 * π * p_rot * np.sin(ρ) / λ
+
+            # Construct input fields with amplitude 0.5 to match normalization
+            # (0.5 amplitude -> 0.25 intensity factor in bright output calculation which has 0.5 prefactor -> 0.5*0.5 = 0.25 amplitude -> 0.0625 intensity = 1/16)
+            ψ = np.empty(4, dtype=np.complex128)
+            for i in range(4):
+                ψ[i] = 0.5 * np.exp(1j * φ[i])
+
+            # Get expected outputs using the shared analytical model
+            b, d, k = superkn.expected_outputs_jit(ψ)
+
+            bright_map[x, y] = b
+            dark_maps[:, x, y] = d
+            kernel_maps[:, x, y] = k
+
+    return bright_map, dark_maps, kernel_maps
+
+
+
 
 # Input fields ----------------------------------------------------------------
 

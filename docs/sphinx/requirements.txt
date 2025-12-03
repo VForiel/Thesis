@@ -11,3 +11,4 @@ gitpython
 sphinx-breeze-theme
 linkify-it-py
 toml
+sphinxcontrib-mermaid
