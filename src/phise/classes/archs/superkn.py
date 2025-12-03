@@ -366,7 +366,7 @@ class SuperKN(Chip):
 
     # Wave propagation --------------------------------------------------------
 
-    def get_output_fields(self, ψ: np.ndarray[complex], λ: u.Quantity) -> Tuple[np.ndarray, np.ndarray, np.ndarray, float]:
+    def get_output_fields(self, ψ: np.ndarray[complex], λ: u.Quantity) -> np.ndarray[complex]:
         """
         Propagate input fields through the kernel nuller.
         Args:
@@ -374,30 +374,35 @@ class SuperKN(Chip):
             λ (u.Quantity): Wavelength for propagation.
 
         Returns:
-            Tuple[np.ndarray, np.ndarray, np.ndarray, float]: Output complex
-            fields (shape (7,)).
+            np.ndarray[complex]: Output complex fields (shape (7,)).
         """
-        φ = self.φ.to(λ.unit).value
-        σ = self.σ.to(λ.unit).value
-        λ0 = self.λ0.to(λ.unit).value
-        ψ *= self.input_attenuation
-        ψ *= np.exp(-1j * 2 * np.pi * self.input_opd.to(λ.unit).value / λ.value)
-        return get_output_fields_jit(ψ=ψ, φ=φ, σ=σ, λ=λ.value, λ0=λ0, output_order=self.output_order)
-    
-    def expected_outputs(self, ψ: np.ndarray[complex]) -> tuple[float, np.ndarray[float], np.ndarray[float]]:
+        return get_output_fields_jit(
+            ψ,
+            self.φ.to(λ.unit).value,
+            self.σ.to(λ.unit).value,
+            λ.value,
+            self.λ0.to(λ.unit).value,
+            self.output_order
+        )
+
+    def get_output_fields_batch(self, ψ: np.ndarray[complex], λ: u.Quantity) -> np.ndarray[complex]:
         """
-        Compute expected outputs from input fields using analytical model.
-        
+        Propagate input fields through the kernel nuller (batch mode).
         Args:
-            ψ (np.ndarray[complex]): Input complex fields for the 4 channels (shape (4,)).
-        
+            ψ (np.ndarray[complex]): Input complex fields for the 4 channels (shape (n, 4)).
+            λ (u.Quantity): Wavelength for propagation.
+
         Returns:
-            tuple:
-                - bright (float): Bright output intensity.
-                - darks (np.ndarray[float]): Dark outputs intensities (shape (6,)).
-                - kernels (np.ndarray[float]): Kernel outputs intensities (shape (3,)).
+            np.ndarray[complex]: Output complex fields (shape (n, 7)).
         """
-        return expected_outputs_jit(ψ)
+        return get_output_fields_batch_jit(
+            ψ,
+            self.φ.to(λ.unit).value,
+            self.σ.to(λ.unit).value,
+            λ.value,
+            self.λ0.to(λ.unit).value,
+            self.output_order
+        )
 
     def process_outputs(self, out: np.ndarray[float]) -> np.ndarray[float]:
         """
@@ -558,6 +563,32 @@ def get_output_fields_jit(
     return ψout[output_order]
 
 @nb.njit()
+def get_output_fields_batch_jit(
+        ψ: np.ndarray[complex],
+        φ: np.ndarray[float],
+        σ: np.ndarray[float],
+        λ: float,
+        λ0: float,
+        output_order: np.ndarray[int]
+    ) -> np.ndarray[complex]:
+    """Batch simulation of a 4-telescope Kernel Nuller propagation.
+
+    Args:
+        ψ (np.ndarray[complex]): Array of input complex amplitudes (n_samples, 4).
+        ... (same as single version)
+
+    Returns:
+        np.ndarray[complex]: Output complex fields (n_samples, 7).
+    """
+    n_samples = ψ.shape[0]
+    out = np.empty((n_samples, 7), dtype=np.complex128)
+    
+    for i in range(n_samples):
+        out[i] = get_output_fields_jit(ψ[i], φ, σ, λ, λ0, output_order)
+        
+    return out
+
+@nb.njit()
 def process_outputs_jit(out: np.ndarray[complex]) -> np.ndarray[float]:
     """Compute kernel outputs from dark outputs intensities.
 
@@ -618,4 +649,31 @@ def expected_outputs_jit(ψ: np.ndarray[complex]) -> tuple[float, np.ndarray[flo
         darks[4] - darks[5]
     ])
     
+    return bright, darks, kernels
+
+@nb.njit()
+def expected_outputs_batch_jit(ψ: np.ndarray[complex]) -> tuple[np.ndarray[float], np.ndarray[float], np.ndarray[float]]:
+    """
+    Compute expected outputs from input fields using analytical model (Batch JIT compiled).
+    
+    Args:
+        ψ (np.ndarray[complex]): Input complex fields (n_samples, 4).
+        
+    Returns:
+        tuple: (bright, darks, kernels)
+            - bright: (n_samples,)
+            - darks: (n_samples, 6)
+            - kernels: (n_samples, 3)
+    """
+    n_samples = ψ.shape[0]
+    bright = np.empty(n_samples, dtype=np.float64)
+    darks = np.empty((n_samples, 6), dtype=np.float64)
+    kernels = np.empty((n_samples, 3), dtype=np.float64)
+    
+    for i in range(n_samples):
+        b, d, k = expected_outputs_jit(ψ[i])
+        bright[i] = b
+        darks[i] = d
+        kernels[i] = k
+        
     return bright, darks, kernels

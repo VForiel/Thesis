@@ -13,13 +13,13 @@ try:
 except Exception:
     pass
 from phise import Context
-from phise.classes.archs.superkn import expected_outputs_jit
+from phise.classes.archs.superkn import expected_outputs_jit, expected_outputs_batch_jit
 
 π = np.pi
 
 def compute_analytical_distrib(n, ctx, opd_errors, α, β, φ1, φ2, φ3, φ4):
     """
-    Compute analytical distribution using SuperKN.expected_outputs_jit.
+    Compute analytical distribution using SuperKN.expected_outputs_batch_jit.
     """
     if ctx.monochromatic:
         λ_range = np.array([ctx.interferometer.λ.to(u.m).value])
@@ -30,48 +30,48 @@ def compute_analytical_distrib(n, ctx, opd_errors, α, β, φ1, φ2, φ3, φ4):
     
     λ0 = ctx.interferometer.λ.to(u.m).value
     
+    # Pre-allocate accumulators
     brights = np.zeros(n)
     darks = np.zeros((n, 6))
     kernels = np.zeros((n, 3))
     
     geometric_phases = np.array([φ1, φ2, φ3, φ4])
     
-    for i in range(n):
-        b_acc = 0
-        d_acc = np.zeros(6)
-        k_acc = np.zeros(3)
+    # opd_errors is (n, 4)
+    
+    for λ in λ_range:
+        # Compute phases for all samples
+        # ph is (4,)
+        ph = geometric_phases * (λ0 / λ)
         
-        for λ in λ_range:
-            # Compute phases
-            ph = geometric_phases * (λ0 / λ)
-            sig = 2 * np.pi * opd_errors[i] / λ
-            
-            # Construct ψ (input fields)
-            # Star field per input j: sqrt(α)/4 * exp(1j * σ_j)
-            # Planet field per input j: sqrt(β)/4 * exp(1j * (σ_j + φ_j))
-            
-            # Incoherent addition: calculate outputs for Star and Planet separately
-            
-            # Star
-            ψ_s = np.zeros(4, dtype=complex)
-            for j in range(4):
-                ψ_s[j] = np.sqrt(α/4) * np.exp(1j * sig[j])
-            b_s, d_s, k_s = expected_outputs_jit(ψ_s)
+        # sig is (n, 4)
+        sig = 2 * np.pi * opd_errors / λ
+        
+        # Construct ψ (input fields)
+        # Star field per input j: sqrt(α)/4 * exp(1j * sig)
+        # We need to broadcast sqrt(α)/4 to (n, 4)
+        
+        # Star
+        # ψ_s is (n, 4)
+        ψ_s = np.sqrt(α/4) * np.exp(1j * sig)
+        
+        b_s, d_s, k_s = expected_outputs_batch_jit(ψ_s)
 
-            # Planet
-            ψ_p = np.zeros(4, dtype=complex)
-            for j in range(4):
-                ψ_p[j] = np.sqrt(β/4) * np.exp(1j * (sig[j] + ph[j]))
-            b_p, d_p, k_p = expected_outputs_jit(ψ_p)
-            
-            # Sum intensities
-            b_acc += b_s + b_p
-            d_acc += d_s + d_p
-            k_acc += k_s + k_p
-            
-        brights[i] = b_acc / len(λ_range)
-        darks[i] = d_acc / len(λ_range)
-        kernels[i] = k_acc / len(λ_range)
+        # Planet
+        # ψ_p is (n, 4)
+        # ph is (4,) -> broadcast to (1, 4)
+        ψ_p = np.sqrt(β/4) * np.exp(1j * (sig + ph[np.newaxis, :]))
+        
+        b_p, d_p, k_p = expected_outputs_batch_jit(ψ_p)
+        
+        # Sum intensities
+        brights += b_s + b_p
+        darks += d_s + d_p
+        kernels += k_s + k_p
+        
+    brights /= len(λ_range)
+    darks /= len(λ_range)
+    kernels /= len(λ_range)
         
     return brights, darks, kernels
 
@@ -128,53 +128,39 @@ def instant_distribution(ctx: Context=None, n=10000, stat=np.median, figsize=(10
 
     # Numerical model ---------------------------------------------------------
 
-    # Prepare data arrays
-    data = np.empty((n, 3))
-    data_so = np.empty((n, 3))
-    data_po = np.empty((n, 3))
-
-    darks = np.empty((n, 6))
-    darks_so = np.empty((n, 6))
-    darks_po = np.empty((n, 6))
-
-    brights = np.empty(n)
-    brights_so = np.empty(n)
-    brights_po = np.empty(n)
-
-    errors = np.empty((n, 4)) * ctx.Γ.unit
-
     # Sample data
-    for i in range(n):
+    # Generate noise for all samples at once
+    upstream_pistons = np.random.normal(0, ctx.Γ.value, size=(n, len(ctx.interferometer.telescopes))) * ctx.Γ.unit
+    errors = upstream_pistons
 
-        # Generate noise
-        upstream_pistons = np.random.normal(0, ctx.Γ.value, size=len(ctx.interferometer.telescopes)) * ctx.Γ.unit
-        errors[i, :] = upstream_pistons
+    # Distrib with companion(s)
+    outs = ctx.observe_batch(upstream_pistons=upstream_pistons)
+    brights = outs[:, 0]
+    darks = outs[:, 1:]
+    k1 = darks[:, 0] - darks[:, 1]
+    k2 = darks[:, 2] - darks[:, 3]
+    k3 = darks[:, 4] - darks[:, 5]
+    data = np.stack([k1, k2, k3], axis=1)
+    
+    # Distrib with star only
+    outs_so = ctx_so.observe_batch(upstream_pistons=upstream_pistons)
+    brights_so = outs_so[:, 0]
+    darks_so = outs_so[:, 1:]
+    k1_so = darks_so[:, 0] - darks_so[:, 1]
+    k2_so = darks_so[:, 2] - darks_so[:, 3]
+    k3_so = darks_so[:, 4] - darks_so[:, 5]
+    data_so = np.stack([k1_so, k2_so, k3_so], axis=1)
 
-        # Distrib with companion(s)
-        outs = ctx.observe(upstream_pistons=upstream_pistons)
-        data[i, :] = ctx.interferometer.chip.process_outputs(outs)
-        brights[i] = outs[0]
-        darks[i, :] = outs[1:]
-        
-        # Distrib with star only
-        outs_so = ctx_so.observe(upstream_pistons=upstream_pistons)
-        data_so[i, :] = ctx_so.interferometer.chip.process_outputs(outs_so)
-        brights_so[i] = outs_so[0]
-        darks_so[i, :] = outs_so[1:]
-
-        # Distrib with planet only
-        outs_po = ctx_po.observe(upstream_pistons=upstream_pistons)
-        data_po[i, :] = ctx_po.interferometer.chip.process_outputs(outs_po)
-        brights_po[i] = outs_po[0]
-        darks_po[i, :] = outs_po[1:]
-
+    # Distrib with planet only
+    outs_po = ctx_po.observe_batch(upstream_pistons=upstream_pistons)
+    brights_po = outs_po[:, 0]
+    darks_po = outs_po[:, 1:]
+    k1_po = darks_po[:, 0] - darks_po[:, 1]
+    k2_po = darks_po[:, 2] - darks_po[:, 3]
+    k3_po = darks_po[:, 4] - darks_po[:, 5]
+    data_po = np.stack([k1_po, k2_po, k3_po], axis=1)
 
     # Analytical model --------------------------------------------------------
-
-    # Prepare data arrays
-    analytical_data = np.empty((n,3))
-    analytical_data_so = np.empty((n,3))
-    analytical_data_po = np.empty((n,3))
 
     # Get parameters (amplitude and phases) for combined scenario
     ψi = ctx.get_input_fields()

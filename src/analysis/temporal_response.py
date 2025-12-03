@@ -48,16 +48,6 @@ def gui(ctx: Context=None):
     status_label = widgets.Label(value='Running... ⌛')
 
     def update_plot(*args):
-        """"update_plot.
-
-Parameters
-----------
-(Automatically added placeholder.)
-
-Returns
--------
-(Automatically added placeholder.)
-"""
         status_label.value = 'Running... ⌛'
         tmp_ctx = copy(ctx)
         nb_companions = int(nb_companion_selector.value)
@@ -79,9 +69,17 @@ Returns
                 tmp2_ctx.target.companions = [tmp_ctx.target.companions[i]]
             else:
                 tmp2_ctx.target.companions = tmp_ctx.target.companions
-            (d, k, b) = tmp2_ctx.observation_serie(n=1)
+            
+            outs = tmp2_ctx.observation_serie(n=1)
+            b = outs[..., 0]
+            d = outs[..., 1:]
+            k = np.empty((outs.shape[0], outs.shape[1], 3))
+            for i_outs in range(outs.shape[0]):
+                k[i_outs] = tmp2_ctx.interferometer.chip.process_outputs(outs[i_outs])
+            
             k = k[0, :, :]
             b = b[0, :]
+
             h_range = tmp_ctx.get_h_range()
             for kernel in range(3):
                 k[:, kernel] /= b
@@ -100,16 +98,6 @@ Returns
         status_label.value = 'Done ✅'
 
     def reset_values():
-        """"reset_values.
-
-Parameters
-----------
-(Automatically added placeholder.)
-
-Returns
--------
-(Automatically added placeholder.)
-"""
         nb_companion_selector.value = len(ctx.target.companions)
         for (i, (θ_slider, ρ_slider, c_slider)) in enumerate(companion_parameters_sliders):
             if i >= len(ctx.target.companions):
@@ -131,16 +119,6 @@ Returns
     update_plot()
 
 def fit(ctx: Context, θ_guess: u.Quantity=0 * u.rad, ρ_guess: u.Quantity=2 * u.mas, c_guess: float=1e-06):
-    """"fit.
-
-Parameters
-----------
-(Automatically added placeholder.)
-
-Returns
--------
-(Automatically added placeholder.)
-"""
     ideal_ctx = copy(ctx)
     ideal_ctx.interferometer.chip.σ = np.zeros(14) * u.nm
     ideal_ctx.interferometer.chip.φ = np.zeros(14) * u.um
@@ -149,44 +127,40 @@ Returns
     selected_kernel = 0
 
     def model(params):
-        """"model.
-
-Parameters
-----------
-(Automatically added placeholder.)
-
-Returns
--------
-(Automatically added placeholder.)
-"""
         (θ, ρ) = params
         ideal_ctx.target.companions = [Companion(c=c_guess, ρ=ρ * u.mas, θ=θ * u.deg, name='Companion')]
-        (_, k, _) = ideal_ctx.observation_serie(n=1)
+        
+        outs = ideal_ctx.observation_serie(n=1)
+        k = np.empty((outs.shape[0], outs.shape[1], 3))
+        for i_outs in range(outs.shape[0]):
+            k[i_outs] = ideal_ctx.interferometer.chip.process_outputs(outs[i_outs])
+        
         return k[0, :, selected_kernel]
 
     def cauchy_loss(params, x, y):
-        """"cauchy_loss.
-
-Parameters
-----------
-(Automatically added placeholder.)
-
-Returns
--------
-(Automatically added placeholder.)
-"""
         γ = np.median(np.abs(y - np.median(y)))
         residuals = y - model(params)
         return np.sum(np.log(1 + (residuals / γ) ** 2))
     x = ctx.get_h_range()
-    (d, k, b) = ctx.observation_serie(n=1)
+    
+    outs = ctx.observation_serie(n=1)
+    k = np.empty((outs.shape[0], outs.shape[1], 3))
+    for i_outs in range(outs.shape[0]):
+        k[i_outs] = ctx.interferometer.chip.process_outputs(outs[i_outs])
     y = k[0, :, selected_kernel]
+    
     c_guess = ideal_ctx.target.companions[0].c
     params = np.array([θ_guess.to(u.deg).value, ρ_guess.to(u.mas).value])
     pop = minimize(cauchy_loss, params, args=(x.to(u.hourangle).value, y)).x
     print(x.shape, y.shape)
     plt.plot(x, model(pop), label='Fit', color='red')
-    plt.plot(x, ideal_ctx.observation_serie(n=1)[1][0, :, selected_kernel], label='Ideal', color='k', linestyle='--')
+    
+    ideal_outs = ideal_ctx.observation_serie(n=1)
+    ideal_k = np.empty((ideal_outs.shape[0], ideal_outs.shape[1], 3))
+    for i in range(ideal_outs.shape[0]):
+        ideal_k[i] = ideal_ctx.interferometer.chip.process_outputs(ideal_outs[i])
+    plt.plot(x, ideal_k[0, :, selected_kernel], label='Ideal', color='k', linestyle='--')
+    
     plt.xlabel('Hour Angle')
     plt.ylabel('Kernel Value')
     plt.legend()

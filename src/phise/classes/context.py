@@ -686,6 +686,109 @@ class Context:
         # We integrate the spectral density (outs / 1 nm) over the wavelength range (in nm)
         return np.trapz(outs, λ_range.to(u.nm).value, axis=0) / 1.0
 
+    def observe_batch(self, upstream_pistons: u.Quantity, spectral_samples=5):
+        """Observe the target in this context with a batch of upstream pistons.
+
+        Args:
+            upstream_pistons (u.Quantity): Array of OPD errors (n_samples, n_telescopes).
+            spectral_samples (int): Number of spectral samples to acquire (default: 5).
+
+        Returns:
+            np.ndarray[float]: Output intensities (n_samples, n_outputs).
+        """
+        # If this context use monochromatic approximation
+        if self.monochromatic:
+            return self.observe_monochromatic_batch(upstream_pistons=upstream_pistons)
+
+        # Sampling bandwidth
+        λ_range = np.linspace(self.interferometer.λ - self.interferometer.Δλ/2, self.interferometer.λ + self.interferometer.Δλ/2, spectral_samples)
+
+        # Initialize output array
+        nb_outs = self.interferometer.chip.nb_raw_outputs
+        n_samples = upstream_pistons.shape[0]
+        outs = np.empty((spectral_samples, n_samples, nb_outs))
+
+        # Monochromatic approximation for each sub-band
+        for i, λ in enumerate(λ_range):
+            ctx_mono = copy(self)
+            ctx_mono.interferometer.λ = λ
+            ctx_mono.interferometer.Δλ = 1 * u.nm
+            ctx_mono._update_pf()
+
+            outs[i] = ctx_mono.observe_monochromatic_batch(upstream_pistons=upstream_pistons)
+
+        # Integrate over the bandwidth
+        return np.trapz(outs, λ_range.to(u.nm).value, axis=0) / 1.0
+
+    def observe_monochromatic_batch(self, upstream_pistons: u.Quantity):
+        """Observe the target with monochromatic approximation for a batch of pistons.
+
+        Args:
+            upstream_pistons (u.Quantity): Array of OPD errors (n_samples, n_telescopes).
+
+        Returns:
+            np.ndarray[float]: Output intensities (n_samples, n_outputs).
+        """
+        nb_outs = self.interferometer.chip.nb_raw_outputs
+        nb_objects = len(self.target.companions) + 1
+        n_samples = upstream_pistons.shape[0]
+
+        # Get ideal input fields (nb_objects, n_telescopes)
+        ψi = self.get_input_fields()
+
+        # Broadcast input fields to (n_samples, nb_objects, n_telescopes)
+        ψi_batch = np.tile(ψi, (n_samples, 1, 1))
+
+        # Get input OPD (atmospheric piston) for each telescope
+        # upstream_pistons is (n_samples, n_telescopes)
+        Δφ = upstream_pistons.to(u.nm).value
+        λ = self.interferometer.λ.to(u.nm).value
+
+        # Add the OPD error to the input fields
+        # We need to shift each object's field by the same piston for that sample
+        # ψi_batch is (n_samples, nb_objects, n_telescopes)
+        # Δφ is (n_samples, n_telescopes) -> broadcast to (n_samples, 1, n_telescopes)
+        Δφ_broad = Δφ[:, np.newaxis, :]
+        
+        # Apply phase shift manually or vectorized
+        # shift_jit takes (n_telescopes,) array. We need a batch version or do it here.
+        # ψ_shifted = ψ * exp(1j * 2pi * Δφ / λ)
+        shift_factor = np.exp(1j * 2 * np.pi * Δφ_broad / λ)
+        ψi_batch *= shift_factor
+
+        # Get output fields for all companions & star
+        # We need to sum the intensities of all objects (incoherent sum)
+        
+        total_intensities = np.zeros((n_samples, nb_outs))
+        
+        # Loop over objects (usually small number: star + 1 or 2 planets)
+        for obj_idx in range(nb_objects):
+            # ψ_obj is (n_samples, n_telescopes)
+            ψ_obj = ψi_batch[:, obj_idx, :]
+            
+            # Propagate through chip
+            # Check if chip has get_output_fields_batch method
+            if hasattr(self.interferometer.chip, 'get_output_fields_batch'):
+                 out_fields = self.interferometer.chip.get_output_fields_batch(ψ_obj, self.interferometer.λ)
+            else:
+                 # Fallback to loop if not implemented
+                 out_fields = np.empty((n_samples, nb_outs), dtype=np.complex128)
+                 for k in range(n_samples):
+                     out_fields[k] = self.interferometer.chip.get_output_fields(ψ_obj[k], self.interferometer.λ)
+            
+            # Acquire intensity
+            if hasattr(self.interferometer.camera, 'acquire_batch'):
+                intensities = self.interferometer.camera.acquire_batch(out_fields)
+            else:
+                # Fallback
+                intensities = np.empty((n_samples, nb_outs))
+                for k in range(n_samples):
+                    intensities[k] = self.interferometer.camera.acquire(out_fields[k])
+                    
+            total_intensities += intensities
+            
+        return total_intensities
+
     def observation_serie(
             self,
             n:int = 1,

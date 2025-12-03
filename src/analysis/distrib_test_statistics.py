@@ -135,7 +135,7 @@ def plot_p_values(t0, t1, tests=ALL_TESTS):
 def imb(z, μ, σ, ν):
     # Felix Dannert et al. 2025
 
-    ν=0.8
+
 
     v = (ν - 1)/2
     a = 2**((1-ν)/2) * np.sqrt(ν)

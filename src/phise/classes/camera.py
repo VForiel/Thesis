@@ -197,3 +197,52 @@ def acquire_jit(ψ: np.ndarray[complex], e: float, ideal=False) -> int:
     else:
         detected_photons = int(expected_photons + np.random.normal(0, math.sqrt(expected_photons)))
     return detected_photons
+
+    def acquire_batch(self, ψ: np.ndarray[complex]) -> np.ndarray[int]:
+        """Simulate acquisition of pixels from a batch of complex electric fields.
+
+        Args:
+            ψ (np.ndarray[complex]): Array of complex electric field amplitudes
+                (n_samples, n_outputs).
+
+        Returns:
+            np.ndarray[int]: Number of detected photons (n_samples, n_outputs).
+        """
+        return acquire_batch_jit(ψ, self._e, ideal=self._ideal)
+
+@nb.njit()
+def acquire_batch_jit(ψ: np.ndarray[complex], e: float, ideal=False) -> np.ndarray[int]:
+    """Batch version of acquire_jit.
+
+    Args:
+        ψ (np.ndarray[complex]): Input fields (n_samples, n_outputs).
+        e (float): Exposure time.
+        ideal (bool): Ideal mode flag.
+
+    Returns:
+        np.ndarray[int]: Detected photons (n_samples, n_outputs).
+    """
+    # Expected photons: |ψ|^2 * e
+    # ψ is (n_samples, n_outputs)
+    expected_photons = np.abs(ψ)**2 * e
+    
+    if ideal:
+        return expected_photons.astype(np.int64)
+    
+    # Poisson noise
+    # We can't use np.random.poisson on large arrays with large lambda directly in some numba versions
+    # But usually it works. Let's try direct call.
+    # If lambda is large, use normal approximation.
+    
+    n_samples, n_outputs = expected_photons.shape
+    detected_photons = np.empty((n_samples, n_outputs), dtype=np.int64)
+    
+    for i in range(n_samples):
+        for j in range(n_outputs):
+            lam = expected_photons[i, j]
+            if lam <= 2000000000.0:
+                detected_photons[i, j] = np.random.poisson(lam)
+            else:
+                detected_photons[i, j] = int(lam + np.random.normal(0, math.sqrt(lam)))
+                
+    return detected_photons
