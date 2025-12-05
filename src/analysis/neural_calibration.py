@@ -269,21 +269,25 @@ def recover_phases(y_proc):
 
 class CalibrationNet(nn.Module):
     """
-    A simple Multi-Layer Perceptron implemented in PyTorch.
+    A deeper Multi-Layer Perceptron implemented in PyTorch.
     """
-    def __init__(self, input_size, hidden_size, output_size, dropout_prob=0.2):
+    def __init__(self, input_size, hidden_size, output_size, dropout_prob=0.1):
         super(CalibrationNet, self).__init__()
-        self.fc1 = nn.Linear(input_size, hidden_size)
-        self.relu = nn.ReLU()
-        self.dropout = nn.Dropout(p=dropout_prob)
-        self.fc2 = nn.Linear(hidden_size, output_size)
+        self.net = nn.Sequential(
+            nn.Linear(input_size, hidden_size),
+            nn.ReLU(),
+            nn.Dropout(dropout_prob),
+            nn.Linear(hidden_size, hidden_size),
+            nn.ReLU(),
+            nn.Dropout(dropout_prob),
+            nn.Linear(hidden_size, hidden_size),
+            nn.ReLU(),
+            nn.Dropout(dropout_prob),
+            nn.Linear(hidden_size, output_size)
+        )
         
     def forward(self, x):
-        out = self.fc1(x)
-        out = self.relu(out)
-        out = self.dropout(out)
-        out = self.fc2(out)
-        return out
+        return self.net(x)
 
 def train_calibration_model(X, y, hidden_size=64, epochs=200, learning_rate=0.01, batch_size=32, dropout_prob=0.2):
     """
@@ -393,6 +397,12 @@ def plot_sensitivity_comparison(model, context, n_observations=50):
             # Apply a static instrumental error (e.g. 50nm rms)
             random_phases = np.random.normal(0, 0.5, n_shifters) # radians
             opd_err = (random_phases / (2*np.pi)) * wavelength.to(u.m).value * u.m
+            # Ensure positive OPD by adding a large offset if needed, or just take modulo if the chip supports it.
+            # But here we are simulating errors. The chip class seems to enforce positive OPD.
+            # Let's assume we can just add a base OPD or take modulo.
+            # Actually, let's just make sure it's positive by adding multiple of wavelength if negative.
+            opd_err = (opd_err % wavelength)
+            
             context.interferometer.chip.φ = opd_err
             context._update_pf()
             outs = context.observe()
@@ -464,14 +474,14 @@ if __name__ == "__main__":
     # --- 2. Generate Dataset ---
     print("\n--- Generating Training Dataset ---")
     # Increased size and quality as requested
-    X_train_raw, y_train_raw = generate_dataset(ctx, n_samples=100, n_steps=20)
+    X_train_raw, y_train_raw = generate_dataset(ctx, n_samples=2000, n_steps=20)
     
     # Preprocess data (Phase -> Sin/Cos)
     X_train, y_train = preprocess_data(X_train_raw, y_train_raw)
     
     # --- 3. Train Model ---
     print("\n--- Training Model ---")
-    model, loss_history = train_calibration_model(X_train, y_train, epochs=100, dropout_prob=0.1)
+    model, loss_history = train_calibration_model(X_train, y_train, hidden_size=256, epochs=500, dropout_prob=0.1)
     
     # --- 4. Test and Plot ---
     print("\n--- Testing and Plotting ---")
