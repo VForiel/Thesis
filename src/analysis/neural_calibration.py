@@ -225,6 +225,65 @@ def generate_dataset(context: Context, n_samples: int=100, n_steps: int=20):
         
     return X, y
 
+def generate_test_dataset(context: Context, test_phases: np.ndarray, n_repeats: int=5, n_steps: int=20):
+    """
+    Generate a test dataset for evaluating the neural network.
+    
+    Args:
+        context (Context): Base context.
+        test_phases (np.ndarray): Array of target phases to test.
+        n_repeats (int): Number of repeats per phase.
+        n_steps (int): Number of steps for the phase scan.
+        
+    Returns:
+        tuple: (X, y) where X is (n_samples, n_features) and y is (n_samples, n_targets).
+               Here y contains the expected phases for each shifter.
+    """
+    # Define cache path
+    cache_dir = Path("generated/dataset/test_phase_maps")
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Create a unique filename based on parameters
+    gamma_val = int(context.Γ.value) if hasattr(context.Γ, 'value') else 0
+    n_phases = len(test_phases)
+    filename = f"test_dataset_np{n_phases}_nr{n_repeats}_nst{n_steps}_gamma{gamma_val}.npz"
+    file_path = cache_dir / filename
+    
+    if file_path.exists():
+        print(f"Loading cached test dataset from {file_path}...")
+        data = np.load(file_path)
+        return data['X'], data['y']
+    
+    n_shifters = len(context.interferometer.chip.φ)
+    wavelength = context.interferometer.λ
+    
+    X = []
+    y = []
+    
+    print(f"Generating test dataset with {len(test_phases)*n_repeats} samples...")
+    
+    for target_phase in tqdm(test_phases):
+        for _ in range(n_repeats):
+            # Ensure positive OPD by taking modulo 2pi
+            phase_val = (-target_phase) % (2*np.pi)
+            current_opd = (phase_val / (2*np.pi)) * wavelength.to(u.m).value * u.m
+            
+            context.interferometer.chip.φ = np.full(n_shifters, current_opd.value) * current_opd.unit
+            
+            # Get input map
+            phase_map = get_phase_map(context, n_steps=n_steps, plot=False)
+            
+            X.append(phase_map.flatten())
+            y.append([target_phase] * n_shifters)
+            
+    X = np.array(X)
+    y = np.array(y)
+    
+    print(f"Saving test dataset to {file_path}...")
+    np.savez(file_path, X=X, y=y)
+    
+    return X, y
+
 def preprocess_data(X, y=None):
     """
     Convert phase data (radians) to sin/cos components to avoid phase wrapping issues.
@@ -267,17 +326,45 @@ def recover_phases(y_proc):
     phases = np.arctan2(y_sin, y_cos)
     return phases % (2*np.pi)
 
+class CosineLoss(nn.Module):
+    """
+    Loss function that maximizes the cosine similarity between predicted and target vectors.
+    Since we predict (cos, sin) pairs, maximizing dot product is equivalent to minimizing angular error.
+    """
+    def __init__(self):
+        super(CosineLoss, self).__init__()
+        
+    def forward(self, pred, target):
+        # pred and target are (batch, 2*n_targets)
+        # We reshape to (batch, n_targets, 2) to handle pairs
+        n_targets = pred.shape[1] // 2
+        
+        pred_pairs = pred.view(-1, n_targets, 2)
+        target_pairs = target.view(-1, n_targets, 2)
+        
+        # Normalize predictions to ensure they are on the unit circle
+        # (Targets are already unit vectors by construction)
+        pred_norm = torch.nn.functional.normalize(pred_pairs, p=2, dim=2)
+        
+        # Cosine similarity: dot product
+        # sum over the 2 components (cos*cos + sin*sin)
+        cosine_sim = torch.sum(pred_norm * target_pairs, dim=2)
+        
+        # Loss = 1 - mean(cosine_similarity)
+        # We want cosine_sim to be 1.
+        loss = 1.0 - torch.mean(cosine_sim)
+        
+        return loss
+
 class CalibrationNet(nn.Module):
     """
-    A deeper Multi-Layer Perceptron implemented in PyTorch.
+    A Multi-Layer Perceptron implemented in PyTorch.
     """
     def __init__(self, input_size, hidden_size, output_size, dropout_prob=0.1):
         super(CalibrationNet, self).__init__()
+        # Simplified architecture for small dataset
         self.net = nn.Sequential(
             nn.Linear(input_size, hidden_size),
-            nn.ReLU(),
-            nn.Dropout(dropout_prob),
-            nn.Linear(hidden_size, hidden_size),
             nn.ReLU(),
             nn.Dropout(dropout_prob),
             nn.Linear(hidden_size, hidden_size),
@@ -289,7 +376,7 @@ class CalibrationNet(nn.Module):
     def forward(self, x):
         return self.net(x)
 
-def train_calibration_model(X, y, hidden_size=64, epochs=200, learning_rate=0.01, batch_size=32, dropout_prob=0.2):
+def train_calibration_model(X, y, hidden_size=128, epochs=500, learning_rate=0.001, batch_size=32, dropout_prob=0.1):
     """
     Create and train the neural network model using PyTorch.
     
@@ -319,8 +406,15 @@ def train_calibration_model(X, y, hidden_size=64, epochs=200, learning_rate=0.01
     
     # Initialize model, loss function, and optimizer
     model = CalibrationNet(input_size, hidden_size, output_size, dropout_prob=dropout_prob)
-    criterion = nn.MSELoss()
-    optimizer = optim.Adam(model.parameters(), lr=learning_rate)
+    
+    # Use Cosine Loss for phase regression
+    criterion = CosineLoss()
+    
+    # Use AdamW with weight decay for regularization
+    optimizer = optim.AdamW(model.parameters(), lr=learning_rate, weight_decay=1e-4)
+    
+    # Learning rate scheduler
+    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=50)
     
     print("Training neural network with PyTorch...")
     loss_history = []
@@ -345,8 +439,10 @@ def train_calibration_model(X, y, hidden_size=64, epochs=200, learning_rate=0.01
         avg_loss = epoch_loss / len(dataloader)
         loss_history.append(avg_loss)
         
-        if (epoch + 1) % 10 == 0 or epoch == epochs - 1:
-            print(f"Epoch [{epoch+1}/{epochs}], Loss: {avg_loss:.6f}")
+        scheduler.step(avg_loss)
+        
+        if (epoch + 1) % 50 == 0 or epoch == epochs - 1:
+            print(f"Epoch [{epoch+1}/{epochs}], Loss: {avg_loss:.6f}, LR: {optimizer.param_groups[0]['lr']:.6f}")
             
     print("Training complete.")
     
@@ -481,7 +577,10 @@ if __name__ == "__main__":
     
     # --- 3. Train Model ---
     print("\n--- Training Model ---")
-    model, loss_history = train_calibration_model(X_train, y_train, hidden_size=256, epochs=500, dropout_prob=0.1)
+    # Tuned hyperparameters for small dataset:
+    # - Smaller hidden size to avoid overfitting
+    # - Cosine Loss
+    model, loss_history = train_calibration_model(X_train, y_train, hidden_size=128, epochs=1000, learning_rate=0.001, dropout_prob=0.1)
     
     # --- 4. Test and Plot ---
     print("\n--- Testing and Plotting ---")
@@ -500,43 +599,23 @@ if __name__ == "__main__":
     test_phases = np.linspace(0, 2*np.pi, 8)
     n_repeats = 5 # Number of repeats per phase to show dispersion
     
-    expected_phases_all = []
-    predicted_phases_all = []
-    
     print("Generating test samples...")
+    X_test_raw, y_test_raw = generate_test_dataset(ctx, test_phases, n_repeats=n_repeats, n_steps=20)
+    
+    # Preprocess input
+    X_test_proc, _ = preprocess_data(X_test_raw)
+    X_test_tensor = torch.tensor(X_test_proc, dtype=torch.float32)
     
     # Enable dropout for inference (Monte Carlo Dropout)
     model.train() 
     
-    wavelength = ctx.interferometer.λ
-    
-    for target_phase in tqdm(test_phases):
-        for _ in range(n_repeats):
-            # Ensure positive OPD by taking modulo 2pi
-            phase_val = (-target_phase) % (2*np.pi)
-            current_opd = (phase_val / (2*np.pi)) * wavelength.to(u.m).value * u.m
-            
-            ctx.interferometer.chip.φ = np.full(n_shifters, current_opd.value) * current_opd.unit
-            
-            # Get input map
-            phase_map = get_phase_map(ctx, n_steps=20, plot=False)
-            
-            # Preprocess input
-            X_test_raw = phase_map.flatten().reshape(1, -1)
-            X_test_proc, _ = preprocess_data(X_test_raw)
-            X_test = torch.tensor(X_test_proc, dtype=torch.float32)
-            
-            # Predict multiple times with dropout to get dispersion
-            # But here we are already looping 'n_repeats'. 
-            # model.train() is already set, so dropout is active.
-            pred_proc = model(X_test).detach().numpy()
-            
-            # Recover phases
-            pred = recover_phases(pred_proc).flatten()
-                
-            # Collect data
-            expected_phases_all.extend([target_phase] * n_shifters)
-            predicted_phases_all.extend(pred)
+    # Predict
+    with torch.no_grad():
+        pred_proc = model(X_test_tensor).detach().numpy()
+        
+    # Recover phases
+    predicted_phases_all = recover_phases(pred_proc).flatten()
+    expected_phases_all = y_test_raw.flatten()
 
     # Violin Plot
     plt.figure(figsize=(12, 6))
