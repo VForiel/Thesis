@@ -1,5 +1,4 @@
 import numpy as np
-import matplotlib.pyplot as plt
 from scipy.optimize import curve_fit
 from copy import deepcopy
 import astropy.units as u
@@ -9,6 +8,7 @@ import torch.nn as nn
 import torch.optim as optim
 import os
 from pathlib import Path
+import matplotlib.pyplot as plt
 
 from phise.classes.context import Context
 from phise.classes.telescope import Telescope
@@ -24,14 +24,13 @@ def sine_func(x, A, B, C, D, E, F):
     """
     return (A + F * x) * np.sin(B * x + C) + D * x + E
 
-def get_phase_map(context: Context, n_steps: int = 50, plot: bool = False) -> np.ndarray:
+def get_phase_map(context: Context, n_steps: int = 50) -> np.ndarray:
     """
     Perform a phase scan on each shifter to determine the output phases.
     
     Args:
         context (Context): The observation context.
         n_steps (int): Number of phase steps for the scan (0 to 2pi).
-        plot (bool): Whether to plot the fits (for debugging).
         
     Returns:
         np.ndarray: A matrix of shape (N_shifters, N_outputs) containing the fitted phase offsets.
@@ -63,10 +62,6 @@ def get_phase_map(context: Context, n_steps: int = 50, plot: bool = False) -> np
     
     # Store original phases
     original_phases = ctx.interferometer.chip.φ.copy()
-    
-    if plot:
-        fig, axs = plt.subplots(n_shifters, 1, figsize=(10, 4*n_shifters), constrained_layout=True)
-        if n_shifters == 1: axs = [axs]
     
     for i in range(n_shifters):
         fluxes = []
@@ -133,22 +128,15 @@ def get_phase_map(context: Context, n_steps: int = 50, plot: bool = False) -> np
                 phase_offset = popt[2] % (2*np.pi)
                 phase_map[i, j] = phase_offset
                 
-                if plot:
-                    axs[i].plot(phase_range_rad, y_data, '.', label=f'Out {j} Data')
-                    axs[i].plot(phase_range_rad, sine_func(phase_range_rad, *popt), '-', label=f'Out {j} Fit')
             except Exception:
                 phase_map[i, j] = 0.0 # Fit failed
         
-        if plot:
-            axs[i].set_title(f"Shifter {i} Scan")
-            axs[i].legend()
-
     # Restore context
     ctx.interferometer.chip.φ = original_phases
     
     return phase_map
 
-def generate_dataset(context: Context, n_samples: int=100, n_steps: int=20):
+def generate_dataset(context: Context, n_samples: int=100, n_steps: int=20, max_workers: int=None):
     """
     Generate a dataset for training the neural network.
     
@@ -156,10 +144,18 @@ def generate_dataset(context: Context, n_samples: int=100, n_steps: int=20):
         context (Context): Base context.
         n_samples (int): Number of samples.
         n_steps (int): Number of steps for the phase scan (quality of input map).
+        max_workers (int, optional): Number of parallel workers to use. If None, uses all logical cores.
         
     Returns:
         tuple: (X, y) where X is (n_samples, n_features) and y is (n_samples, n_targets).
     """
+    import os
+    import copy
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    try:
+        import psutil  # to get physical core count if available
+    except ImportError:
+        psutil = None
     # Define cache path
     cache_dir = Path("generated/dataset/phase_maps")
     cache_dir.mkdir(parents=True, exist_ok=True)
@@ -183,39 +179,39 @@ def generate_dataset(context: Context, n_samples: int=100, n_steps: int=20):
     
     wavelength = context.interferometer.λ
     
-    print(f"Generating dataset with {n_samples} samples...")
-    for _ in tqdm(range(n_samples)):
-        # Generate random perturbation (phases in radians)
-        # We want to cover the full 0-2pi range to be robust?
-        # Or small perturbations? The user said "plein de contexts perturbés".
-        # Let's pick random phases in [0, 2pi].
-        random_phases_rad = np.random.uniform(0, 2*np.pi, n_shifters)
-        
+    # Determine workers: prefer provided value; else use all logical cores
+    if max_workers is None:
+        max_workers = os.cpu_count() or 1
+    physical_cores = psutil.cpu_count(logical=False) if psutil else None
+    print(f"Generating dataset with {n_samples} samples... (workers={max_workers}, physical={physical_cores})")
+
+    def _generate_one_sample(_seed: int=None):
+        # Use a deepcopy of the context to avoid shared mutable state across threads
+        local_ctx = copy.deepcopy(context)
+        # Generate random perturbation
+        rng = np.random.default_rng(_seed)
+        random_phases_rad = rng.uniform(0, 2*np.pi, n_shifters)
         # Convert to OPD
         random_opd = (random_phases_rad / (2*np.pi)) * wavelength.to(u.m).value * u.m
-        
-        # Apply to context
-        # We assume the "base" context has 0 phases or we just overwrite them.
-        # Let's overwrite.
-        context.interferometer.chip.φ = random_opd
-        
-        # Run calibration
-        # We use a small number of steps to be faster? 
-        # User said "scan de 0 à 2pi". 
-        # If we want to be fast, maybe 20 steps is enough.
-        phase_map = get_phase_map(context, n_steps=n_steps, plot=False)
-        
-        # Input vector: Flattened phase map
-        X.append(phase_map.flatten())
-        
-        # Target vector: The ideal phases to correct this state.
-        # If current state is phi, we want to apply -phi (modulo 2pi) to get back to 0.
-        # Or maybe we want to reach a specific target?
-        # Assuming we want to zero the phases (constructive interference or specific state).
-        # The user said: "phases optimisées (que tu peux obtenir analytiquement en faisant φ=[-σ]%2pi)"
-        # So target is [-random_phases_rad] % 2pi.
-        target = (-random_phases_rad) % (2*np.pi)
-        y.append(target)
+        # Apply to local context
+        local_ctx.interferometer.chip.φ = random_opd
+        # Compute phase map
+        phase_map = get_phase_map(local_ctx, n_steps=n_steps)
+        # Input vector
+        x_row = phase_map.flatten()
+        # Target vector: [-sigma] % 2pi
+        y_row = (-random_phases_rad) % (2*np.pi)
+        return x_row, y_row
+
+    # Parallel execution with threads (NumPy/numba sections release the GIL)
+    futures = []
+    with ThreadPoolExecutor(max_workers=max_workers) as ex:
+        for i in range(n_samples):
+            futures.append(ex.submit(_generate_one_sample, i))
+        for f in tqdm(as_completed(futures), total=len(futures)):
+            x_row, y_row = f.result()
+            X.append(x_row)
+            y.append(y_row)
         
     X = np.array(X)
     y = np.array(y)
@@ -271,7 +267,7 @@ def generate_test_dataset(context: Context, test_phases: np.ndarray, n_repeats: 
             context.interferometer.chip.φ = np.full(n_shifters, current_opd.value) * current_opd.unit
             
             # Get input map
-            phase_map = get_phase_map(context, n_steps=n_steps, plot=False)
+            phase_map = get_phase_map(context, n_steps=n_steps)
             
             X.append(phase_map.flatten())
             y.append([target_phase] * n_shifters)
@@ -284,21 +280,30 @@ def generate_test_dataset(context: Context, test_phases: np.ndarray, n_repeats: 
     
     return X, y
 
-def preprocess_data(X, y=None):
+def preprocess_data(X, n_shifters, n_outputs, y=None):
     """
-    Convert phase data (radians) to sin/cos components to avoid phase wrapping issues.
+    Convert phase data (radians) to sin/cos components and reshape for CNN.
     
     Args:
-        X (np.ndarray): Input phases (N_samples, N_features).
+        X (np.ndarray): Input phases (N_samples, n_shifters * n_outputs).
+        n_shifters (int): Number of shifters (height).
+        n_outputs (int): Number of outputs (width).
         y (np.ndarray, optional): Target phases (N_samples, N_targets).
         
     Returns:
         tuple: (X_processed, y_processed)
+        X_processed: (N_samples, 2, n_shifters, n_outputs)
     """
+    N = X.shape[0]
+    # Reshape to (N, n_shifters, n_outputs)
+    X_reshaped = X.reshape(N, n_shifters, n_outputs)
+    
     # Convert inputs: [cos(X), sin(X)]
-    X_cos = np.cos(X)
-    X_sin = np.sin(X)
-    X_proc = np.concatenate([X_cos, X_sin], axis=1)
+    X_cos = np.cos(X_reshaped)
+    X_sin = np.sin(X_reshaped)
+    
+    # Stack to (N, 2, n_shifters, n_outputs)
+    X_proc = np.stack([X_cos, X_sin], axis=1)
     
     y_proc = None
     if y is not None:
@@ -326,64 +331,70 @@ def recover_phases(y_proc):
     phases = np.arctan2(y_sin, y_cos)
     return phases % (2*np.pi)
 
-class CosineLoss(nn.Module):
+class UnitCircleMSELoss(nn.Module):
     """
-    Loss function that maximizes the cosine similarity between predicted and target vectors.
-    Since we predict (cos, sin) pairs, maximizing dot product is equivalent to minimizing angular error.
+    MSE Loss with regularization to enforce unit circle constraint (sin^2 + cos^2 = 1).
     """
-    def __init__(self):
-        super(CosineLoss, self).__init__()
-        
+    def __init__(self, lambda_reg=0.1):
+        super(UnitCircleMSELoss, self).__init__()
+        self.lambda_reg = lambda_reg
+        self.mse = nn.MSELoss()
+
     def forward(self, pred, target):
-        # pred and target are (batch, 2*n_targets)
-        # We reshape to (batch, n_targets, 2) to handle pairs
+        # MSE Loss
+        loss_mse = self.mse(pred, target)
+        
+        # Unit Circle Regularization: (sin^2 + cos^2 - 1)^2
+        # pred is (Batch, 2*N_targets)
         n_targets = pred.shape[1] // 2
+        pred_cos = pred[:, :n_targets]
+        pred_sin = pred[:, n_targets:]
+        norm_sq = pred_cos**2 + pred_sin**2
+        loss_reg = torch.mean((norm_sq - 1.0)**2)
         
-        pred_pairs = pred.view(-1, n_targets, 2)
-        target_pairs = target.view(-1, n_targets, 2)
-        
-        # Normalize predictions to ensure they are on the unit circle
-        # (Targets are already unit vectors by construction)
-        pred_norm = torch.nn.functional.normalize(pred_pairs, p=2, dim=2)
-        
-        # Cosine similarity: dot product
-        # sum over the 2 components (cos*cos + sin*sin)
-        cosine_sim = torch.sum(pred_norm * target_pairs, dim=2)
-        
-        # Loss = 1 - mean(cosine_similarity)
-        # We want cosine_sim to be 1.
-        loss = 1.0 - torch.mean(cosine_sim)
-        
-        return loss
+        return loss_mse + self.lambda_reg * loss_reg
 
 class CalibrationNet(nn.Module):
     """
-    A Multi-Layer Perceptron implemented in PyTorch.
+    A Fully Connected Neural Network (MLP) implemented in PyTorch.
     """
-    def __init__(self, input_size, hidden_size, output_size, dropout_prob=0.1):
+    def __init__(self, n_shifters, n_outputs, output_size, dropout_prob=0.05):
         super(CalibrationNet, self).__init__()
-        # Simplified architecture for small dataset
-        self.net = nn.Sequential(
-            nn.Linear(input_size, hidden_size),
-            nn.ReLU(),
-            nn.Dropout(dropout_prob),
-            nn.Linear(hidden_size, hidden_size),
-            nn.ReLU(),
-            nn.Dropout(dropout_prob),
-            nn.Linear(hidden_size, output_size)
+        
+        # Input size: 2 * n_shifters * n_outputs
+        self.input_size = 2 * n_shifters * n_outputs
+        
+        self.regressor = nn.Sequential(
+            nn.Linear(self.input_size, 64),
+            nn.LeakyReLU(0.1),
+            
+            nn.Linear(64, 32),
+            nn.LeakyReLU(0.1),
+            
+            nn.Linear(32, output_size)
         )
         
     def forward(self, x):
-        return self.net(x)
+        # Flatten input: (Batch, 2, H, W) -> (Batch, 2*H*W)
+        out = x.view(x.size(0), -1)
+        out = self.regressor(out)
+        return out
 
-def train_calibration_model(X, y, hidden_size=128, epochs=500, learning_rate=0.001, batch_size=32, dropout_prob=0.1):
+def enable_dropout(model):
+    """ Function to enable the dropout layers during test-time """
+    for m in model.modules():
+        if isinstance(m, (nn.Dropout, nn.Dropout2d)):
+            m.train()
+
+def train_calibration_model(X, y, n_shifters, n_outputs, epochs=500, learning_rate=0.001, batch_size=32, dropout_prob=0.05):
     """
     Create and train the neural network model using PyTorch.
     
     Args:
-        X (np.ndarray): Input data (N_samples, N_features).
+        X (np.ndarray): Input data (N_samples, 2, n_shifters, n_outputs).
         y (np.ndarray): Target data (N_samples, N_targets).
-        hidden_size (int): Number of neurons in the hidden layer.
+        n_shifters (int): Number of shifters.
+        n_outputs (int): Number of outputs.
         epochs (int): Number of training epochs.
         learning_rate (float): Learning rate for the optimizer.
         batch_size (int): Batch size for training.
@@ -401,14 +412,13 @@ def train_calibration_model(X, y, hidden_size=128, epochs=500, learning_rate=0.0
     dataset = torch.utils.data.TensorDataset(X_tensor, y_tensor)
     dataloader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=True)
     
-    input_size = X.shape[1]
     output_size = y.shape[1]
     
     # Initialize model, loss function, and optimizer
-    model = CalibrationNet(input_size, hidden_size, output_size, dropout_prob=dropout_prob)
+    model = CalibrationNet(n_shifters, n_outputs, output_size, dropout_prob=dropout_prob)
     
-    # Use Cosine Loss for phase regression
-    criterion = CosineLoss()
+    # Use MSE Loss
+    criterion = nn.MSELoss()
     
     # Use AdamW with weight decay for regularization
     optimizer = optim.AdamW(model.parameters(), lr=learning_rate, weight_decay=1e-4)
@@ -448,107 +458,25 @@ def train_calibration_model(X, y, hidden_size=128, epochs=500, learning_rate=0.0
     
     return model, loss_history
 
-def plot_sensitivity_comparison(model, context, n_observations=50):
-    """
-    Compare null depth sensitivity to atmospheric noise for:
-    1. Ideal case (perfect cophasing)
-    2. Perturbed case (random errors)
-    3. Calibrated case (AI correction)
-    """
-    print("\n--- Running Sensitivity Analysis ---")
-    
-    # Define range of atmospheric noise (Γ)
-    gammas = np.linspace(0, 300, 10) * u.nm
-    
-    null_depths_ideal = []
-    null_depths_perturbed = []
-    null_depths_calibrated = []
-    
-    # Store original state
-    original_gamma = context.Γ
-    original_phases = deepcopy(context.interferometer.chip.φ)
-    
-    wavelength = context.interferometer.λ
-    n_shifters = len(context.interferometer.chip.φ)
-    
-    for gamma in tqdm(gammas, desc="Scanning Gamma"):
-        context.Γ = gamma
-        
-        fluxes_ideal = []
-        fluxes_perturbed = []
-        fluxes_calibrated = []
-        
-        for _ in range(n_observations):
-            # --- Ideal ---
-            context.interferometer.chip.φ = np.zeros(n_shifters) * u.m
-            # Force recomputation of atmospheric phase screens
-            context._update_pf() 
-            outs = context.observe()
-            # Null depth = sum(Dark) / Bright. Dark are indices 1-6. Bright is 0.
-            # Avoid division by zero if bright is 0 (unlikely)
-            nd = np.sum(outs[1:]) / (outs[0] + 1e-10)
-            fluxes_ideal.append(nd)
-            
-            # --- Perturbed ---
-            # Apply a static instrumental error (e.g. 50nm rms)
-            random_phases = np.random.normal(0, 0.5, n_shifters) # radians
-            opd_err = (random_phases / (2*np.pi)) * wavelength.to(u.m).value * u.m
-            # Ensure positive OPD by adding a large offset if needed, or just take modulo if the chip supports it.
-            # But here we are simulating errors. The chip class seems to enforce positive OPD.
-            # Let's assume we can just add a base OPD or take modulo.
-            # Actually, let's just make sure it's positive by adding multiple of wavelength if negative.
-            opd_err = (opd_err % wavelength)
-            
-            context.interferometer.chip.φ = opd_err
-            context._update_pf()
-            outs = context.observe()
-            nd = np.sum(outs[1:]) / (outs[0] + 1e-10)
-            fluxes_perturbed.append(nd)
-            
-            # --- Calibrated ---
-            # 1. Get phase map (scan)
-            phase_map = get_phase_map(context, n_steps=20, plot=False)
-            # 2. Predict correction
-            X_in_raw = phase_map.flatten().reshape(1, -1)
-            X_in_proc, _ = preprocess_data(X_in_raw)
-            X_in = torch.tensor(X_in_proc, dtype=torch.float32)
-            
-            pred_proc = model(X_in).detach().numpy()
-            pred_correction_rad = recover_phases(pred_proc).flatten()
-            
-            # 3. Apply correction
-            correction_opd = (pred_correction_rad / (2*np.pi)) * wavelength.to(u.m).value * u.m
-            
-            # Apply correction to the *current* state (which is opd_err)
-            context.interferometer.chip.φ = opd_err + correction_opd
-            context._update_pf()
-            outs = context.observe()
-            nd = np.sum(outs[1:]) / (outs[0] + 1e-10)
-            fluxes_calibrated.append(nd)
-            
-        null_depths_ideal.append(np.mean(fluxes_ideal))
-        null_depths_perturbed.append(np.mean(fluxes_perturbed))
-        null_depths_calibrated.append(np.mean(fluxes_calibrated))
-        
-    # Restore context
-    context.Γ = original_gamma
-    context.interferometer.chip.φ = original_phases
-    
-    # Plot
-    plt.figure(figsize=(10, 6))
-    plt.plot(gammas.value, null_depths_ideal, 'g-o', label='Ideal (No Static Error)')
-    plt.plot(gammas.value, null_depths_perturbed, 'r-x', label='Perturbed (Static Error)')
-    plt.plot(gammas.value, null_depths_calibrated, 'b-^', label='AI Calibrated')
-    
-    plt.xlabel(f"Atmospheric Noise Γ ({gammas.unit})")
-    plt.ylabel("Null Depth (Dark/Bright)")
-    plt.title("Sensitivity Analysis: Calibration Performance vs Atmosphere")
-    plt.yscale('log')
-    plt.legend()
-    plt.grid(True, which="both", ls="-", alpha=0.5)
-    plt.show()
+
+
+import argparse
+import time
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description='Train calibration network')
+    parser.add_argument('--epochs', type=int, default=1000, help='Number of epochs')
+    parser.add_argument('--lr', type=float, default=0.001, help='Learning rate')
+    parser.add_argument('--dropout', type=float, default=0.05, help='Dropout probability')
+    parser.add_argument('--samples', type=int, default=2000, help='Number of training samples')
+    parser.add_argument('--steps', type=int, default=20, help='Number of phase scan steps')
+    parser.add_argument('--note', type=str, default="", help='Note for the log')
+    parser.add_argument('--no-plot', action='store_true', help='Disable plotting')
+    
+    args = parser.parse_args()
+    
+    start_time = time.time()
+    
     # --- 1. Setup Context ---
     print("--- Setting up Simulation Context ---")
     
@@ -565,50 +493,55 @@ if __name__ == "__main__":
     ctx.target.f *= 0.01 
     ctx.target.companions = []
     
-    n_shifters = 14
+    n_shifters = len(ctx.interferometer.chip.φ)
+    n_outputs = ctx.interferometer.chip.nb_raw_outputs
     
     # --- 2. Generate Dataset ---
     print("\n--- Generating Training Dataset ---")
     # Increased size and quality as requested
-    X_train_raw, y_train_raw = generate_dataset(ctx, n_samples=2000, n_steps=20)
+    X_train_raw, y_train_raw = generate_dataset(ctx, n_samples=args.samples, n_steps=args.steps)
     
     # Preprocess data (Phase -> Sin/Cos)
-    X_train, y_train = preprocess_data(X_train_raw, y_train_raw)
+    X_train, y_train = preprocess_data(X_train_raw, n_shifters, n_outputs, y_train_raw)
     
     # --- 3. Train Model ---
     print("\n--- Training Model ---")
     # Tuned hyperparameters for small dataset:
     # - Smaller hidden size to avoid overfitting
     # - Cosine Loss
-    model, loss_history = train_calibration_model(X_train, y_train, hidden_size=128, epochs=1000, learning_rate=0.001, dropout_prob=0.1)
+    model, loss_history = train_calibration_model(X_train, y_train, n_shifters, n_outputs, epochs=args.epochs, learning_rate=args.lr, dropout_prob=args.dropout)
     
     # --- 4. Test and Plot ---
     print("\n--- Testing and Plotting ---")
     
-    # Plot Loss
-    plt.figure(figsize=(10, 5))
-    plt.plot(loss_history)
-    plt.title("Training Loss")
-    plt.xlabel("Epoch")
-    plt.ylabel("MSE Loss")
-    plt.grid(True)
-    plt.show()
-    
-    # Generate Test Data for Violin Plot
+    # Generate Test Data for Evaluation
     # We want discrete expected phases
     test_phases = np.linspace(0, 2*np.pi, 8)
     n_repeats = 5 # Number of repeats per phase to show dispersion
     
     print("Generating test samples...")
-    X_test_raw, y_test_raw = generate_test_dataset(ctx, test_phases, n_repeats=n_repeats, n_steps=20)
+    X_test_raw, y_test_raw = generate_test_dataset(ctx, test_phases, n_repeats=n_repeats, n_steps=args.steps)
     
     # Preprocess input
-    X_test_proc, _ = preprocess_data(X_test_raw)
+    X_test_proc, _ = preprocess_data(X_test_raw, n_shifters, n_outputs)
     X_test_tensor = torch.tensor(X_test_proc, dtype=torch.float32)
     
     # Enable dropout for inference (Monte Carlo Dropout)
     model.train() 
     
+    # --- Evaluate on Train Set ---
+    X_train_tensor = torch.tensor(X_train, dtype=torch.float32)
+    with torch.no_grad():
+        pred_train = model(X_train_tensor).detach().numpy()
+    
+    pred_phases_train = recover_phases(pred_train).flatten()
+    expected_phases_train = y_train_raw.flatten()
+    diff_train = np.abs(pred_phases_train - expected_phases_train)
+    diff_train = np.minimum(diff_train, 2*np.pi - diff_train)
+    mse_train = np.mean(diff_train**2)
+    print(f"Train MSE: {mse_train:.6f}")
+
+    # --- Evaluate on Test Set ---
     # Predict
     with torch.no_grad():
         pred_proc = model(X_test_tensor).detach().numpy()
@@ -617,44 +550,53 @@ if __name__ == "__main__":
     predicted_phases_all = recover_phases(pred_proc).flatten()
     expected_phases_all = y_test_raw.flatten()
 
-    # Violin Plot
-    plt.figure(figsize=(12, 6))
+    # Calculate MSE
+    # We need to handle phase wrapping for MSE calculation
+    # Error = min(|diff|, 2pi - |diff|)
+    diff = np.abs(predicted_phases_all - expected_phases_all)
+    diff = np.minimum(diff, 2*np.pi - diff)
+    mse = np.mean(diff**2)
     
-    # Organize data for violin plot
-    data_to_plot = []
-    labels = []
+    print(f"Sample Prediction (first 5): {predicted_phases_all[:5]}")
+    print(f"Sample Target (first 5):     {expected_phases_all[:5]}")
     
-    expected_phases_all = np.array(expected_phases_all)
-    predicted_phases_all = np.array(predicted_phases_all)
+    final_loss = loss_history[-1]
+    duration = time.time() - start_time
     
-    for tp in test_phases:
-        # We need to handle phase wrapping in comparison too
-        # But here we just plot raw predicted values vs expected
-        mask = np.isclose(expected_phases_all, tp)
-        preds = predicted_phases_all[mask]
+    print(f"\nFinal Loss: {final_loss:.6f}")
+    print(f"Test MSE: {mse:.6f}")
+    print(f"Duration: {duration:.2f}s")
+    
+    # Log results
+    log_entry = f"| {int(time.time())} | Epochs={args.epochs}, LR={args.lr}, Drop={args.dropout}, Samples={args.samples} | {final_loss:.6f} | {mse:.6f} (Train: {mse_train:.6f}) | {duration:.2f}s | {args.note} |\n"
+    
+    with open("optimization_log.md", "a") as f:
+        f.write(log_entry)
+
+    if not args.no_plot:
+        # Plot Loss
+        plt.figure(figsize=(12, 5))
         
-        # Unwrap for plotting if needed, but here we expect [0, 2pi]
-        # If prediction is near 0 and target is 2pi, it looks bad but is good.
-        # Let's shift predictions to be close to target for visualization
-        preds_shifted = preds.copy()
-        # Simple unwrap logic for visualization: if diff > pi, shift by 2pi
-        diff = preds - tp
-        preds_shifted[diff > np.pi] -= 2*np.pi
-        preds_shifted[diff < -np.pi] += 2*np.pi
+        plt.subplot(1, 2, 1)
+        plt.plot(loss_history, label='Training Loss')
+        plt.xlabel('Epoch')
+        plt.ylabel('Loss')
+        plt.title('Training Loss History')
+        plt.legend()
+        plt.grid(True)
         
-        data_to_plot.append(preds_shifted)
-        labels.append(f"{tp:.2f}")
+        # Plot Scatter: Expected vs Predicted
+        plt.subplot(1, 2, 2)
+        plt.scatter(expected_phases_all, predicted_phases_all, alpha=0.1, s=1)
+        plt.plot([0, 2*np.pi], [0, 2*np.pi], 'r--', label='Ideal')
+        plt.xlabel('Expected Phase (rad)')
+        plt.ylabel('Predicted Phase (rad)')
+        plt.title(f'Prediction vs Target (MSE={mse:.4f})')
+        plt.xlim(0, 2*np.pi)
+        plt.ylim(0, 2*np.pi)
+        plt.legend()
+        plt.grid(True)
         
-    plt.violinplot(data_to_plot, positions=range(len(test_phases)), showmeans=True)
-    plt.xticks(range(len(test_phases)), labels)
-    plt.xlabel("Expected Phase (rad)")
-    plt.ylabel("Predicted Phase (rad)")
-    plt.title("Model Performance: Predicted vs Expected Phase (Sin/Cos Space)")
-    plt.grid(True, axis='y')
-    
-    plt.plot(range(len(test_phases)), test_phases, 'r--', label='Ideal', alpha=0.5)
-    plt.legend()
-    plt.show()
-    
-    # --- 5. Sensitivity Analysis Plot ---
-    plot_sensitivity_comparison(model, ctx, n_observations=50)
+        plt.tight_layout()
+        plt.show()
+

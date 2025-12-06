@@ -7,7 +7,7 @@ authors = [
     {name = "VForiel", email = "vince.lrf@gmail.com"},
     {name = "VForiel", email = "vincent.foriel@gmail.com"},
 ]
-requires-python = ">=3.11.0"
+requires-python = ">=3.9.0"
 readme = "README.md"
 license = {text = "MIT"}
 dynamic = ["dependencies"]
