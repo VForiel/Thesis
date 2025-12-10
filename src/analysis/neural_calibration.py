@@ -9,6 +9,7 @@ import torch.optim as optim
 import os
 from pathlib import Path
 import matplotlib.pyplot as plt
+from itertools import combinations
 
 from phise.classes.context import Context
 from phise.classes.telescope import Telescope
@@ -24,117 +25,145 @@ def sine_func(x, A, B, C, D, E, F):
     """
     return (A + F * x) * np.sin(B * x + C) + D * x + E
 
-def get_phase_map(context: Context, n_steps: int = 50) -> np.ndarray:
+def get_phase_visibility_map_full(context: Context, n_steps: int = 50) -> tuple:
     """
-    Perform a phase scan on each shifter to determine the output phases.
+    Perform a comprehensive phase scan for all input combinations, like hcharacterize in Kbench.
+    
+    For each combination of inputs (1, 2, 3, or 4 inputs active), scan each shifter
+    from 0 to 2π and extract both the phase offset and visibility (amplitude) for each output.
     
     Args:
         context (Context): The observation context.
         n_steps (int): Number of phase steps for the scan (0 to 2pi).
         
     Returns:
-        np.ndarray: A matrix of shape (N_shifters, N_outputs) containing the fitted phase offsets.
+        tuple: (phases, visibilities) where each is a concatenated vector containing:
+            - For 1 input: 4 combinations × 14 shifters × 4 outputs = 224 values
+            - For 2 inputs: 6 combinations × 14 shifters × 4 outputs = 336 values
+            - For 3 inputs: 4 combinations × 14 shifters × 4 outputs = 224 values
+            - For 4 inputs: 1 combination × 14 shifters × 4 outputs = 56 values
+            Total: 840 values for phases, 840 for visibilities → 1680 features
     """
     # Work on a copy to not disturb the original context
     ctx = deepcopy(context)
     
-    # Ensure we are in monochromatic mode for calibration to avoid bandwidth smearing
-    # or use the provided context settings. The user didn't specify, but calibration 
-    # is usually done with a laser (monochromatic).
-    # However, if we want to calibrate the "broadband" response, we should keep it as is.
-    # Let's assume we use the context as provided, but maybe force monochromatic for speed if not specified.
-    # For now, I'll stick to the context's observe method.
+    n_shifters = len(ctx.interferometer.chip.φ)  # Should be 14 for SuperKN
+    n_outputs = ctx.interferometer.chip.nb_raw_outputs  # Should be 4 for SuperKN
+    n_inputs = len(ctx.interferometer.telescopes)  # Should be 4 for VLTI
     
-    n_shifters = len(ctx.interferometer.chip.φ)
-    n_outputs = ctx.interferometer.chip.nb_raw_outputs
+    # Generate all input combinations
+    all_input_indices = list(range(n_inputs))
+    input_combinations = []
     
-    # Result matrix
-    phase_map = np.zeros((n_shifters, n_outputs))
+    # 1-input: [0], [1], [2], [3] → 4 combinations
+    for i in all_input_indices:
+        input_combinations.append([i])
+    
+    # 2-inputs: [0,1], [0,2], [0,3], [1,2], [1,3], [2,3] → 6 combinations
+    for combo in combinations(all_input_indices, 2):
+        input_combinations.append(list(combo))
+    
+    # 3-inputs: [0,1,2], [0,1,3], [0,2,3], [1,2,3] → 4 combinations
+    for combo in combinations(all_input_indices, 3):
+        input_combinations.append(list(combo))
+    
+    # 4-inputs (all): [0,1,2,3] → 1 combination
+    input_combinations.append(all_input_indices)
+    
+    # Total: 4 + 6 + 4 + 1 = 15 combinations
+    # Each combination will be scanned for all shifters
+    # Storage: List to collect all (phase, visibility) pairs
+    all_phases = []
+    all_visibilities = []
     
     # Scan range: 0 to 2pi (in terms of phase shift)
-    # Chip.φ is likely an OPD (length) or Phase (rad). 
-    # In phise/classes/context.py: self.interferometer.chip.φ[i-1] += Δφ where Δφ = λ/4.
-    # This implies φ is a length (OPD).
-    # So we need to scan OPD from 0 to λ.
     wavelength = ctx.interferometer.λ
     opd_range = np.linspace(0, wavelength.to(u.m).value, n_steps) * u.m
-    phase_range_rad = np.linspace(0, 2*np.pi, n_steps) # For plotting/fitting x-axis
+    phase_range_rad = np.linspace(0, 2*np.pi, n_steps)
     
     # Store original phases
     original_phases = ctx.interferometer.chip.φ.copy()
     
-    for i in range(n_shifters):
-        fluxes = []
+    # Get photon flux per telescope (assuming no companion, just the star)
+    # We use a simple uniform flux across all telescopes
+    photon_flux_per_tel = ctx.pf  # This is already computed by Context
+    
+    # Iterate over all input combinations
+    for active_inputs in input_combinations:
+        # Create input field vector: only active inputs have non-zero amplitude
+        # ψ = sqrt(photon_flux) * e^(i*phase) for active inputs, 0 otherwise
+        base_input_fields = np.zeros(n_inputs, dtype=complex)
+        for idx in active_inputs:
+            # Assume equal amplitude for all active inputs (star only, no companion)
+            # photon_flux_per_tel is an array, take the value for this telescope
+            base_input_fields[idx] = np.sqrt(photon_flux_per_tel[idx])
         
-        # Reset all phases to original before scanning this shifter?
-        # Or keep others at original? Yes, keep others at original.
-        ctx.interferometer.chip.φ = original_phases.copy()
-        
-        # Scan
-        for opd in opd_range:
-            # Set phase for shifter i
-            # Note: φ is likely 0-indexed in the array, but 1-indexed in labels.
-            # We iterate 0 to N-1.
-            # We add the scan offset to the original value? 
-            # The user says "scan de phase de 0 à 2pi". Usually this means replacing the value.
-            # But if there is a bias, we might want to scan around it.
-            # Let's assume we replace the value or add to 0.
-            # If we want to characterize the *current* state, we should probably scan *around* the current value
-            # or just sweep the full range.
-            # Let's sweep the full range [0, lambda] replacing the current value.
-            ctx.interferometer.chip.φ[i] = opd
+        # For each shifter, scan from 0 to 2π
+        for shifter_idx in range(n_shifters):
+            fluxes = []
             
-            # Observe
-            # We use observe_monochromatic for speed and clarity if possible, 
-            # but observe() is safer if the context is broadband.
-            # We assume upstream_pistons=0 (no atmospheric turbulence) for calibration.
-            outs = ctx.observe(upstream_pistons=np.zeros(len(ctx.interferometer.telescopes))*u.m)
-            fluxes.append(outs)
+            # Reset all phases to zero
+            ctx.interferometer.chip.φ = np.zeros(n_shifters) * u.m
             
-        fluxes = np.array(fluxes) # (n_steps, n_outputs)
-        
-        # Fit for each output
-        for j in range(n_outputs):
-            y_data = fluxes[:, j]
-            
-            # Check if this output is modulated
-            amplitude = np.ptp(y_data)
-            if amplitude < 1e-9: # Threshold for "no signal" or "noise only"
-                phase_map[i, j] = 0 # Or NaN? 0 is safer for NN input
-                continue
+            # Scan this shifter
+            for opd in opd_range:
+                ctx.interferometer.chip.φ[shifter_idx] = opd
                 
-            # Initial guess
-            # A * sin(B*x + C) + E
-            # x is phase_range_rad (0 to 2pi)
-            # B should be 1
-            A_guess = amplitude / 2
-            E_guess = np.mean(y_data)
-            B_guess = 1.0
-            C_guess = 0.0
-            D_guess = 0.0
-            F_guess = 0.0
-            
-            p0 = [A_guess, B_guess, C_guess, D_guess, E_guess, F_guess]
-            
-            try:
-                # Constrain B to be close to 1?
-                # The user said "même que dans Kbench", Kbench doesn't constrain B much but checks period.
-                popt, _ = curve_fit(sine_func, phase_range_rad, y_data, p0=p0, maxfev=2000)
+                # Use get_output_fields directly instead of observe
+                # Returns: array of complex output fields
+                output_fields = ctx.interferometer.chip.get_output_fields(base_input_fields, wavelength)
                 
-                # Extract C (phase offset)
-                # We want the phase of the oscillation.
-                # Model: sin(x + C). 
-                # We store C modulo 2pi.
-                phase_offset = popt[2] % (2*np.pi)
-                phase_map[i, j] = phase_offset
+                # Compute output intensities (photon counts)
+                output_intensities = np.abs(output_fields)**2
+                fluxes.append(output_intensities)
+            
+            fluxes = np.array(fluxes)  # (n_steps, n_outputs)
+            
+            # Fit each output to extract phase and visibility
+            for output_idx in range(n_outputs):
+                y_data = fluxes[:, output_idx]
                 
-            except Exception:
-                phase_map[i, j] = 0.0 # Fit failed
-        
+                # Visibility: max - min (amplitude of oscillation)
+                visibility = np.ptp(y_data)
+                
+                # Check if this output is modulated
+                if visibility < 1e-9:  # Threshold for "no signal"
+                    all_phases.append(0.0)
+                    all_visibilities.append(0.0)
+                    continue
+
+                all_visibilities.append(visibility)
+                
+                # Fit to extract phase offset
+                # Initial guess for sine fit
+                A_guess = visibility / 2
+                E_guess = np.mean(y_data)
+                B_guess = 1.0  # Expect one period over 2π
+                C_guess = 0.0
+                D_guess = 0.0
+                F_guess = 0.0
+                
+                p0 = [A_guess, B_guess, C_guess, D_guess, E_guess, F_guess]
+                
+                try:
+                    popt, _ = curve_fit(sine_func, phase_range_rad, y_data, p0=p0, maxfev=2000)
+                    
+                    # Extract C (phase offset) modulo 2π
+                    phase_offset = popt[2] % (2*np.pi)
+                    all_phases.append(phase_offset)
+                    
+                except Exception:
+                    # Fit failed, store 0
+                    all_phases.append(0.0)
+    
     # Restore context
     ctx.interferometer.chip.φ = original_phases
     
-    return phase_map
+    # Convert to numpy arrays
+    phases_vector = np.array(all_phases)
+    visibilities_vector = np.array(all_visibilities)
+    
+    return phases_vector, visibilities_vector
 
 def generate_dataset(context: Context, n_samples: int=100, n_steps: int=20, max_workers: int=None):
     """
@@ -195,10 +224,10 @@ def generate_dataset(context: Context, n_samples: int=100, n_steps: int=20, max_
         random_opd = (random_phases_rad / (2*np.pi)) * wavelength.to(u.m).value * u.m
         # Apply to local context
         local_ctx.interferometer.chip.φ = random_opd
-        # Compute phase map
-        phase_map = get_phase_map(local_ctx, n_steps=n_steps)
-        # Input vector
-        x_row = phase_map.flatten()
+        # Compute phase and visibility maps
+        phases_vector, visibilities_vector = get_phase_visibility_map_full(local_ctx, n_steps=n_steps)
+        # Input vector: concatenate phases and visibilities
+        x_row = np.concatenate([phases_vector, visibilities_vector])
         # Target vector: [-sigma] % 2pi
         y_row = (-random_phases_rad) % (2*np.pi)
         return x_row, y_row
@@ -266,10 +295,12 @@ def generate_test_dataset(context: Context, test_phases: np.ndarray, n_repeats: 
             
             context.interferometer.chip.φ = np.full(n_shifters, current_opd.value) * current_opd.unit
             
-            # Get input map
-            phase_map = get_phase_map(context, n_steps=n_steps)
+            # Get input map with phases and visibilities
+            phases_vector, visibilities_vector = get_phase_visibility_map_full(context, n_steps=n_steps)
             
-            X.append(phase_map.flatten())
+            # Concatenate phases and visibilities
+            input_vector = np.concatenate([phases_vector, visibilities_vector])
+            X.append(input_vector)
             y.append([target_phase] * n_shifters)
             
     X = np.array(X)
@@ -282,28 +313,37 @@ def generate_test_dataset(context: Context, test_phases: np.ndarray, n_repeats: 
 
 def preprocess_data(X, n_shifters, n_outputs, y=None):
     """
-    Convert phase data (radians) to sin/cos components and reshape for CNN.
+    Convert phase/visibility data to sin/cos components.
     
     Args:
-        X (np.ndarray): Input phases (N_samples, n_shifters * n_outputs).
-        n_shifters (int): Number of shifters (height).
-        n_outputs (int): Number of outputs (width).
-        y (np.ndarray, optional): Target phases (N_samples, N_targets).
+        X (np.ndarray): Input data (N_samples, 1680) where 1680 = 840 phases + 840 visibilities.
+        n_shifters (int): Number of shifters (14).
+        n_outputs (int): Number of outputs (4).
+        y (np.ndarray, optional): Target phases (N_samples, 14).
         
     Returns:
         tuple: (X_processed, y_processed)
-        X_processed: (N_samples, 2, n_shifters, n_outputs)
+        X_processed: (N_samples, 2520) - phases converted to sin/cos, visibilities normalized
     """
     N = X.shape[0]
-    # Reshape to (N, n_shifters, n_outputs)
-    X_reshaped = X.reshape(N, n_shifters, n_outputs)
     
-    # Convert inputs: [cos(X), sin(X)]
-    X_cos = np.cos(X_reshaped)
-    X_sin = np.sin(X_reshaped)
+    # Split phases and visibilities
+    # X shape: (N, 1680) where first 840 are phases, last 840 are visibilities
+    phases = X[:, :840]  # (N, 840)
+    visibilities = X[:, 840:]  # (N, 840)
     
-    # Stack to (N, 2, n_shifters, n_outputs)
-    X_proc = np.stack([X_cos, X_sin], axis=1)
+    # Convert phases to sin/cos
+    phases_sin = np.sin(phases)
+    phases_cos = np.cos(phases)
+    
+    # Normalize visibilities (simple min-max normalization per sample)
+    # To avoid division by zero, add small epsilon
+    vis_max = visibilities.max(axis=1, keepdims=True) + 1e-9
+    visibilities_norm = visibilities / vis_max
+    
+    # Concatenate: [sin(phases), cos(phases), visibilities_norm]
+    # Total: 1470 + 1470 + 1470 = 4410 features
+    X_proc = np.concatenate([phases_sin, phases_cos, visibilities_norm], axis=1)
     
     y_proc = None
     if y is not None:
@@ -357,28 +397,41 @@ class UnitCircleMSELoss(nn.Module):
 class CalibrationNet(nn.Module):
     """
     A Fully Connected Neural Network (MLP) implemented in PyTorch.
+    Processes concatenated phase/visibility vectors.
     """
-    def __init__(self, n_shifters, n_outputs, output_size, dropout_prob=0.05):
+    def __init__(self, input_size, output_size, dropout_prob=0.05):
         super(CalibrationNet, self).__init__()
         
-        # Input size: 2 * n_shifters * n_outputs
-        self.input_size = 2 * n_shifters * n_outputs
+        # Input: (batch, 4410) = sin/cos phases + visibilities
+        # Output: (batch, 28) = sin/cos for 14 shifter target phases
         
-        self.regressor = nn.Sequential(
-            nn.Linear(self.input_size, 64),
-            nn.LeakyReLU(0.1),
+        # Use LayerNorm instead of BatchNorm to avoid issues with small batches
+        self.network = nn.Sequential(
+            nn.Linear(input_size, 1024),
+            nn.ReLU(),
+            nn.LayerNorm(1024),
+            nn.Dropout(dropout_prob),
             
-            nn.Linear(64, 32),
-            nn.LeakyReLU(0.1),
+            nn.Linear(1024, 512),
+            nn.ReLU(),
+            nn.LayerNorm(512),
+            nn.Dropout(dropout_prob),
             
-            nn.Linear(32, output_size)
+            nn.Linear(512, 256),
+            nn.ReLU(),
+            nn.LayerNorm(256),
+            nn.Dropout(dropout_prob),
+            
+            nn.Linear(256, 128),
+            nn.ReLU(),
+            nn.LayerNorm(128),
+            nn.Dropout(dropout_prob),
+            
+            nn.Linear(128, output_size * 2)  # sin/cos for each target
         )
         
     def forward(self, x):
-        # Flatten input: (Batch, 2, H, W) -> (Batch, 2*H*W)
-        out = x.view(x.size(0), -1)
-        out = self.regressor(out)
-        return out
+        return self.network(x)
 
 def enable_dropout(model):
     """ Function to enable the dropout layers during test-time """
@@ -391,10 +444,10 @@ def train_calibration_model(X, y, n_shifters, n_outputs, epochs=500, learning_ra
     Create and train the neural network model using PyTorch.
     
     Args:
-        X (np.ndarray): Input data (N_samples, 2, n_shifters, n_outputs).
-        y (np.ndarray): Target data (N_samples, N_targets).
-        n_shifters (int): Number of shifters.
-        n_outputs (int): Number of outputs.
+        X (np.ndarray): Input data (N_samples, 4410) with sin/cos phases + normalized visibilities.
+        y (np.ndarray): Target data (N_samples, 28) - sin/cos for each of 14 target phases.
+        n_shifters (int): Number of shifters (14).
+        n_outputs (int): Number of outputs (4).
         epochs (int): Number of training epochs.
         learning_rate (float): Learning rate for the optimizer.
         batch_size (int): Batch size for training.
@@ -412,10 +465,11 @@ def train_calibration_model(X, y, n_shifters, n_outputs, epochs=500, learning_ra
     dataset = torch.utils.data.TensorDataset(X_tensor, y_tensor)
     dataloader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=True)
     
-    output_size = y.shape[1]
+    output_size = y.shape[1] // 2  # Should be 14 (number of shifters)
+    input_size = X.shape[1]  # Should be 4410 after preprocessing
     
     # Initialize model, loss function, and optimizer
-    model = CalibrationNet(n_shifters, n_outputs, output_size, dropout_prob=dropout_prob)
+    model = CalibrationNet(input_size, output_size, dropout_prob=dropout_prob)
     
     # Use MSE Loss
     criterion = nn.MSELoss()
@@ -560,7 +614,7 @@ if __name__ == "__main__":
     print(f"Sample Prediction (first 5): {predicted_phases_all[:5]}")
     print(f"Sample Target (first 5):     {expected_phases_all[:5]}")
     
-    final_loss = loss_history[-1]
+    final_loss = loss_history[-1] if loss_history else 0.0
     duration = time.time() - start_time
     
     print(f"\nFinal Loss: {final_loss:.6f}")

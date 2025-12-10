@@ -24,3 +24,6 @@ src/phise.egg-info/
 
 # Doc
 _build/
+
+# Generated files
+generated/
