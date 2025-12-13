@@ -9,3 +9,4 @@ pandas
 jupyterlab
 ipykernel
 fitter
+torch

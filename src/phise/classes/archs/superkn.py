@@ -366,23 +366,44 @@ class SuperKN(Chip):
 
     # Wave propagation --------------------------------------------------------
 
-    def get_output_fields(self, ψ: np.ndarray[complex], λ: u.Quantity) -> Tuple[np.ndarray, np.ndarray, np.ndarray, float]:
+    def get_output_fields(self, ψ: np.ndarray[complex], λ: u.Quantity, φ: Optional[u.Quantity]=None, σ: Optional[u.Quantity]=None) -> Tuple[np.ndarray, np.ndarray, np.ndarray, float]:
         """
         Propagate input fields through the kernel nuller.
         Args:
             ψ (np.ndarray[complex]): Input complex fields for the 4 channels (shape (4,)).
             λ (u.Quantity): Wavelength for propagation.
+            φ (Optional[u.Quantity]): Override for phase shifters OPDs.
+            σ (Optional[u.Quantity]): Override for intrinsic OPD errors.
 
         Returns:
             Tuple[np.ndarray, np.ndarray, np.ndarray, float]: Output complex
             fields (shape (7,)).
         """
-        φ = self.φ.to(λ.unit).value
-        σ = self.σ.to(λ.unit).value
+        if φ is None:
+            φ_val = self.φ.to(λ.unit).value
+        else:
+            φ_val = φ.to(λ.unit).value
+
+        if σ is None:
+            σ_val = self.σ.to(λ.unit).value
+        else:
+            σ_val = σ.to(λ.unit).value
+
         λ0 = self.λ0.to(λ.unit).value
+        ψ = ψ.copy() # Safe copy
         ψ *= self.input_attenuation
+        
+        # Check for batch processing
+        # If φ_val has batch dim (N, 14), output should use batch jit
+        # ψ might be (N, 4) or (4,)
+        
+        is_batch = (φ_val.ndim == 2)
+        
+        if is_batch:
+             return get_output_fields_batch_jit(ψ=ψ, φ=φ_val, σ=σ_val, λ=λ.value, λ0=λ0, output_order=self.output_order)
+         
         ψ *= np.exp(-1j * 2 * np.pi * self.input_opd.to(λ.unit).value / λ.value)
-        return get_output_fields_jit(ψ=ψ, φ=φ, σ=σ, λ=λ.value, λ0=λ0, output_order=self.output_order)
+        return get_output_fields_jit(ψ=ψ, φ=φ_val, σ=σ_val, λ=λ.value, λ0=λ0, output_order=self.output_order)
     
     def expected_outputs(self, ψ: np.ndarray[complex]) -> tuple[float, np.ndarray[float], np.ndarray[float]]:
         """
@@ -619,3 +640,181 @@ def expected_outputs_jit(ψ: np.ndarray[complex]) -> tuple[float, np.ndarray[flo
     ])
     
     return bright, darks, kernels
+
+@nb.njit()
+def get_output_fields_batch_jit(
+        ψ: np.ndarray[complex],
+        φ: np.ndarray[float],
+        σ: np.ndarray[float],
+        λ: float,
+        λ0: float,
+        output_order: np.ndarray[int]
+    ) -> np.ndarray[complex]:
+    """Simulate a 4-telescope Kernel Nuller propagation (batch mode).
+    
+    Args:
+        ψ (np.ndarray[complex]): Input complex fields (N_batch, 4) or broadcastable.
+        φ (np.ndarray[float]): Array of injected OPDs (N_batch, 14).
+        σ (np.ndarray[float]): Array of intrinsic OPD errors (14,) or (N_batch, 14).
+        λ (float): Wavelength of the light.
+        λ0 (float): Reference wavelength (wavelength units).
+        output_order (np.ndarray[int]): Order of the outputs.
+
+    Returns:
+        np.ndarray[complex]: Output complex fields (N_batch, 7).
+    """
+    n_batch = φ.shape[0]
+    λ_ratio = λ0 / λ
+    
+    # 2x2 Nuller
+    N = 1 / np.sqrt(2) * np.array([
+        [1,  1],
+        [1, -1]
+    ], dtype=np.complex128)
+    Na = np.abs(N)
+    Nφ = np.angle(N)
+    N = Na * np.exp(1j * Nφ * λ_ratio)
+
+    # 2x2 Cross-Recombiner
+    θ = np.pi / 2
+    R = 1 / np.sqrt(2) * np.array([
+        [np.exp(1j * θ / 2), np.exp(-1j * θ / 2)],
+        [np.exp(-1j * θ / 2), np.exp(1j * θ / 2)]
+    ], dtype=np.complex128)
+    Ra = np.abs(R)
+    Rφ = np.angle(R)
+    R = Ra * np.exp(1j * Rφ * λ_ratio)
+
+    # Add first layer of perturbations & shifts
+    # Φ shape: (N_batch, 14)
+    if σ.ndim == 1:
+        Φ = φ + σ # Broadcast add
+    else:
+        Φ = φ + σ
+        
+    # 1. Input shift
+    # ψ (N, 4) or (4,)
+    # If ψ is (4,), reshape to (1, 4) to allow broadcasting against Φ[:, :4] which is (N, 4)
+    # Actually phase.shift_jit supports (complex, float) -> complex or (array, array) -> array
+    # If we pass two arrays of same shape (N, 4), it works elementwise.
+    # So we should ensure ψ is broadcasted to (N, 4) if it's not already.
+    
+    if ψ.ndim == 1:
+        ψ_in = np.empty((n_batch, 4), dtype=np.complex128)
+        for i in range(n_batch):
+            ψ_in[i] = ψ
+    else:
+        ψ_in = ψ
+
+    ψ0 = phase.shift_jit(ψ_in, Φ[:, :4], λ) # (N, 4)
+
+    # 2. First layer of nullers
+    # Apply N to pairs (0,1) and (2,3)
+    # ψ0[:, 0] and ψ0[:, 1] -> N
+    # ψ0[:, 2] and ψ0[:, 3] -> N
+    
+    # N = [[N00, N01], [N10, N11]]
+    # out0 = N00*in0 + N01*in1
+    # out1 = N10*in0 + N11*in1
+    
+    ψ1 = np.empty((n_batch, 4), dtype=np.complex128)
+    
+    # Pair 1 (0,1)
+    ψ1[:, 0] = N[0, 0] * ψ0[:, 0] + N[0, 1] * ψ0[:, 1]
+    ψ1[:, 1] = N[1, 0] * ψ0[:, 0] + N[1, 1] * ψ0[:, 1]
+    
+    # Pair 2 (2,3)
+    ψ1[:, 2] = N[0, 0] * ψ0[:, 2] + N[0, 1] * ψ0[:, 3]
+    ψ1[:, 3] = N[1, 0] * ψ0[:, 2] + N[1, 1] * ψ0[:, 3]
+
+    # 3. Second layer of perturbations & shifts
+    ψ1 = phase.shift_jit(ψ1, φ[:, 4:8], λ) # Note: φ not Φ here as per original logic?
+    # Original: ψ1 = phase.shift_jit(ψ1, φ[4:8], λ)
+    # Wait, original uses φ (injected) ONLY, not Φ (injected + intrinsic) for layers > 1?
+    # Original code:
+    # Φ = φ + σ 
+    # ψ0 = phase.shift_jit(ψ, Φ[:4], λ)
+    # ...
+    # ψ1 = phase.shift_jit(ψ1, φ[4:8], λ) 
+    # This implies σ is only added to the *first* layer?
+    # Checking original 'SuperKN' class...
+    # Yes: Φ = φ + σ; ψ0 = ... Φ[:4]
+    # Then ψ1 = ... φ[4:8]
+    # It seems intrinsic errors σ are only modeled on the input shifters (0-3)?
+    # Let's double check this interpretation.
+    # "Φ = φ + σ # merge perturbations and shifts"
+    # "ψ0 = phase.shift_jit(ψ, Φ[:4], λ)"
+    # Then "ψ1 = phase.shift_jit(ψ1, φ[4:8], λ)"
+    # Indeed, `σ` is NOT used in later layers in the original `get_output_fields_jit`.
+    # It seems `σ` has shape (14,) but only first 4 are used? Or maybe `φ` and `σ` are used differently?
+    # If `σ` is (14,), why define it as 14 if only 4 are used?
+    # In `get_superKN` factory:
+    # chip.add_layer(Shifter(inputs=[0,1,2,3], static=True, default=...)) -> This matches first 4.
+    # chip.add_layer(Shifter(inputs=[0,1,2,3])) -> This matches φ[0:4].
+    # Then there are other shifters.
+    # The `get_output_fields_jit` seems to IGNORE σ[4:]!
+    # This might be a bug or feature of the simplified JIT model.
+    # I will replicate the EXACT behavior of the original JIT function to be safe.
+    
+    # 4. Second layer of nullers
+    # Inputs: (0, 2) and (1, 3) from ψ1
+    ψ2 = np.empty((n_batch, 4), dtype=np.complex128)
+    
+    # Pair 1 (0, 2)
+    ψ2[:, 0] = N[0, 0] * ψ1[:, 0] + N[0, 1] * ψ1[:, 2]
+    ψ2[:, 1] = N[1, 0] * ψ1[:, 0] + N[1, 1] * ψ1[:, 2] # output indices 0,1 of this block
+    
+    # Pair 2 (1, 3)
+    ψ2[:, 2] = N[0, 0] * ψ1[:, 1] + N[0, 1] * ψ1[:, 3]
+    ψ2[:, 3] = N[1, 0] * ψ1[:, 1] + N[1, 1] * ψ1[:, 3]
+
+    # 5. Splitters and final bright output
+    # ψb = ψ2[0] -> ψ2[:, 0]
+    # ψ3 needs to replicate ψ2[1:] ... 
+    
+    # ψ3 = ψ2[1:].repeat(2) / sqrt(2)
+    # ψ2[1:] is (3,) in original. Here it is ψ2[:, 1:].
+    # We want equivalent of repeat(2).
+    # [A, B, C] -> [A, A, B, B, C, C]
+    
+    ψ3 = np.empty((n_batch, 6), dtype=np.complex128)
+    inv_sqrt2 = 1.0 / np.sqrt(2)
+    
+    ψ3[:, 0] = ψ2[:, 1] * inv_sqrt2
+    ψ3[:, 1] = ψ2[:, 1] * inv_sqrt2
+    ψ3[:, 2] = ψ2[:, 2] * inv_sqrt2
+    ψ3[:, 3] = ψ2[:, 2] * inv_sqrt2
+    ψ3[:, 4] = ψ2[:, 3] * inv_sqrt2
+    ψ3[:, 5] = ψ2[:, 3] * inv_sqrt2
+    
+    # 6. Final perturbations & shifts
+    ψ3 = phase.shift_jit(ψ3, φ[:, 8:], λ)
+
+    # 7. Final recombination
+    # R (2,2) on pairs: (0,2), (1,4), (3,5) of ψ3
+    # ψ3 indices: 0,1,2,3,4,5
+    
+    ψout_unsorted = np.empty((n_batch, 7), dtype=np.complex128)
+    ψout_unsorted[:, 0] = ψ2[:, 0] # Bright
+    
+    # Pair 1: (0, 2) -> (1, 2 output indices)
+    ψout_unsorted[:, 1] = R[0, 0] * ψ3[:, 0] + R[0, 1] * ψ3[:, 2]
+    ψout_unsorted[:, 2] = R[1, 0] * ψ3[:, 0] + R[1, 1] * ψ3[:, 2]
+    
+    # Pair 2: (1, 4) -> (3, 4 output indices)
+    ψout_unsorted[:, 3] = R[0, 0] * ψ3[:, 1] + R[0, 1] * ψ3[:, 4]
+    ψout_unsorted[:, 4] = R[1, 0] * ψ3[:, 1] + R[1, 1] * ψ3[:, 4]
+    
+    # Pair 3: (3, 5) -> (5, 6 output indices)
+    ψout_unsorted[:, 5] = R[0, 0] * ψ3[:, 3] + R[0, 1] * ψ3[:, 5]
+    ψout_unsorted[:, 6] = R[1, 0] * ψ3[:, 3] + R[1, 1] * ψ3[:, 5]
+
+    # Reorder outputs
+    # output_order is (7,)
+    # we want to return ψout[:, output_order]
+    
+    ψout = np.empty_like(ψout_unsorted)
+    for i in range(7):
+        ψout[:, i] = ψout_unsorted[:, output_order[i]]
+        
+    return ψout

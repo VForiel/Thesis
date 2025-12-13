@@ -1,3 +1,8 @@
+import sys
+from pathlib import Path
+# Add src to path to allow running without installing
+sys.path.append(str(Path.cwd() / "src"))
+
 import numpy as np
 from scipy.optimize import curve_fit
 from copy import deepcopy
@@ -25,141 +30,111 @@ def sine_func(x, A, B, C, D, E, F):
     """
     return (A + F * x) * np.sin(B * x + C) + D * x + E
 
-def get_phase_visibility_map_full(context: Context, n_steps: int = 50) -> tuple:
+def sine_func_simple(x, A, C, E):
     """
-    Perform a comprehensive phase scan for all input combinations, like hcharacterize in Kbench.
-    
-    For each combination of inputs (1, 2, 3, or 4 inputs active), scan each shifter
-    from 0 to 2π and extract both the phase offset and visibility (amplitude) for each output.
-    
-    Args:
-        context (Context): The observation context.
-        n_steps (int): Number of phase steps for the scan (0 to 2pi).
-        
-    Returns:
-        tuple: (phases, visibilities) where each is a concatenated vector containing:
-            - For 1 input: 4 combinations × 14 shifters × 4 outputs = 224 values
-            - For 2 inputs: 6 combinations × 14 shifters × 4 outputs = 336 values
-            - For 3 inputs: 4 combinations × 14 shifters × 4 outputs = 224 values
-            - For 4 inputs: 1 combination × 14 shifters × 4 outputs = 56 values
-            Total: 840 values for phases, 840 for visibilities → 1680 features
+    Simplified model function: A * sin(x + C) + E
+    Assuming B=1, D=0, F=0.
     """
-    # Work on a copy to not disturb the original context
-    ctx = deepcopy(context)
+    return A * np.sin(x + C) + E
+
+def get_phase_visibility_map_full(context: Context, n_steps: int = 50, base_phases: u.Quantity = None) -> tuple:
+    """
+    Perform a comprehensive phase scan for all input combinations.
+    Now supports explicit base_phases to avoid modifying context.
+    """
+    # NO DEEPCOPY needed if we don't mutate context
+    ctx = context 
     
-    n_shifters = len(ctx.interferometer.chip.φ)  # Should be 14 for SuperKN
-    n_outputs = ctx.interferometer.chip.nb_raw_outputs  # Should be 4 for SuperKN
-    n_inputs = len(ctx.interferometer.telescopes)  # Should be 4 for VLTI
+    n_shifters = len(ctx.interferometer.chip.φ)
+    n_outputs = ctx.interferometer.chip.nb_raw_outputs
+    n_inputs = len(ctx.interferometer.telescopes)
     
+    # ... (combinations logic same as before) ...
     # Generate all input combinations
     all_input_indices = list(range(n_inputs))
     input_combinations = []
     
-    # 1-input: [0], [1], [2], [3] → 4 combinations
+    # 1-input: [0], [1], [2], [3]
     for i in all_input_indices:
         input_combinations.append([i])
     
-    # 2-inputs: [0,1], [0,2], [0,3], [1,2], [1,3], [2,3] → 6 combinations
+    # 2-inputs
     for combo in combinations(all_input_indices, 2):
         input_combinations.append(list(combo))
     
-    # 3-inputs: [0,1,2], [0,1,3], [0,2,3], [1,2,3] → 4 combinations
+    # 3-inputs
     for combo in combinations(all_input_indices, 3):
         input_combinations.append(list(combo))
     
-    # 4-inputs (all): [0,1,2,3] → 1 combination
+    # 4-inputs
     input_combinations.append(all_input_indices)
     
-    # Total: 4 + 6 + 4 + 1 = 15 combinations
-    # Each combination will be scanned for all shifters
-    # Storage: List to collect all (phase, visibility) pairs
     all_phases = []
     all_visibilities = []
     
-    # Scan range: 0 to 2pi (in terms of phase shift)
     wavelength = ctx.interferometer.λ
     opd_range = np.linspace(0, wavelength.to(u.m).value, n_steps) * u.m
     phase_range_rad = np.linspace(0, 2*np.pi, n_steps)
     
-    # Store original phases
-    original_phases = ctx.interferometer.chip.φ.copy()
+    # Use provided base_phases or default from context
+    if base_phases is not None:
+        original_phases = base_phases
+    else:
+        original_phases = ctx.interferometer.chip.φ
     
-    # Get photon flux per telescope (assuming no companion, just the star)
-    # We use a simple uniform flux across all telescopes
-    photon_flux_per_tel = ctx.pf  # This is already computed by Context
+    photon_flux_per_tel = ctx.pf
     
-    # Iterate over all input combinations
     for active_inputs in input_combinations:
-        # Create input field vector: only active inputs have non-zero amplitude
-        # ψ = sqrt(photon_flux) * e^(i*phase) for active inputs, 0 otherwise
         base_input_fields = np.zeros(n_inputs, dtype=complex)
         for idx in active_inputs:
-            # Assume equal amplitude for all active inputs (star only, no companion)
-            # photon_flux_per_tel is an array, take the value for this telescope
             base_input_fields[idx] = np.sqrt(photon_flux_per_tel[idx])
         
-        # For each shifter, scan from 0 to 2π
+        n_batch = n_shifters * n_steps
+        phi_batch = np.zeros((n_batch, n_shifters))
+        
+        base_phases_val = original_phases.to(u.m).value
+        
+        idx = 0
         for shifter_idx in range(n_shifters):
-            fluxes = []
-            
-            # Reset all phases to zero
-            ctx.interferometer.chip.φ = np.zeros(n_shifters) * u.m
-            
-            # Scan this shifter
             for opd in opd_range:
-                ctx.interferometer.chip.φ[shifter_idx] = opd
+                current_phases = base_phases_val.copy()
+                current_phases[shifter_idx] += opd.to(u.m).value
+                phi_batch[idx] = current_phases
+                idx += 1
                 
-                # Use get_output_fields directly instead of observe
-                # Returns: array of complex output fields
-                output_fields = ctx.interferometer.chip.get_output_fields(base_input_fields, wavelength)
-                
-                # Compute output intensities (photon counts)
-                output_intensities = np.abs(output_fields)**2
-                fluxes.append(output_intensities)
-            
-            fluxes = np.array(fluxes)  # (n_steps, n_outputs)
-            
-            # Fit each output to extract phase and visibility
-            for output_idx in range(n_outputs):
-                y_data = fluxes[:, output_idx]
-                
-                # Visibility: max - min (amplitude of oscillation)
-                visibility = np.ptp(y_data)
-                
-                # Check if this output is modulated
-                if visibility < 1e-9:  # Threshold for "no signal"
-                    all_phases.append(0.0)
-                    all_visibilities.append(0.0)
-                    continue
-
-                all_visibilities.append(visibility)
-                
-                # Fit to extract phase offset
-                # Initial guess for sine fit
-                A_guess = visibility / 2
-                E_guess = np.mean(y_data)
-                B_guess = 1.0  # Expect one period over 2π
-                C_guess = 0.0
-                D_guess = 0.0
-                F_guess = 0.0
-                
-                p0 = [A_guess, B_guess, C_guess, D_guess, E_guess, F_guess]
-                
-                try:
-                    popt, _ = curve_fit(sine_func, phase_range_rad, y_data, p0=p0, maxfev=2000)
-                    
-                    # Extract C (phase offset) modulo 2π
-                    phase_offset = popt[2] % (2*np.pi)
-                    all_phases.append(phase_offset)
-                    
-                except Exception:
-                    # Fit failed, store 0
-                    all_phases.append(0.0)
+        input_fields_batch = np.tile(base_input_fields, (n_batch, 1))
+        sigma_batch = np.tile(ctx.interferometer.chip.σ.to(u.m).value, (n_batch, 1)) * u.m
+        
+        output_fields_batch = ctx.interferometer.chip.get_output_fields(
+            ψ=input_fields_batch,
+            λ=wavelength,
+            σ=sigma_batch,
+            φ=phi_batch * u.m
+        )
+        
+        fluxes_batch = np.abs(output_fields_batch)**2
+        
+        # ... (FFT logic same as previous step) ...
+        # Copied from previous edit
+        fluxes = fluxes_batch.reshape(n_shifters, n_steps, n_outputs)
+        fluxes_t = fluxes.transpose(0, 2, 1)
+        fluxes_flat = fluxes_t.reshape(-1, n_steps)
+        fluxes_in = fluxes_flat[:, :-1]
+        N = n_steps - 1
+        Y = np.fft.rfft(fluxes_in, axis=1)
+        Y1 = Y[:, 1]
+        phases = (np.angle(Y1) + np.pi/2) % (2*np.pi)
+        metrics_vis = np.ptp(fluxes_flat, axis=1)
+        peaks = np.max(fluxes_flat, axis=1)
+        thresholds = np.maximum(1.0, peaks * 0.001)
+        mask = metrics_vis < thresholds
+        phases[mask] = 0.0
+        metrics_vis[mask] = 0.0
+        all_phases.extend(phases.tolist())
+        all_visibilities.extend(metrics_vis.tolist())
     
-    # Restore context
-    ctx.interferometer.chip.φ = original_phases
+    # No context restoration needed if we didn't mutate it
     
-    # Convert to numpy arrays
     phases_vector = np.array(all_phases)
     visibilities_vector = np.array(all_visibilities)
     
@@ -168,24 +143,15 @@ def get_phase_visibility_map_full(context: Context, n_steps: int = 50) -> tuple:
 def generate_dataset(context: Context, n_samples: int=100, n_steps: int=20, max_workers: int=None):
     """
     Generate a dataset for training the neural network.
-    
-    Args:
-        context (Context): Base context.
-        n_samples (int): Number of samples.
-        n_steps (int): Number of steps for the phase scan (quality of input map).
-        max_workers (int, optional): Number of parallel workers to use. If None, uses all logical cores.
-        
-    Returns:
-        tuple: (X, y) where X is (n_samples, n_features) and y is (n_samples, n_targets).
     """
     import os
     import copy
     from concurrent.futures import ThreadPoolExecutor, as_completed
     try:
-        import psutil  # to get physical core count if available
+        import psutil
     except ImportError:
         psutil = None
-    # Define cache path
+    
     cache_dir = Path("generated/dataset/phase_maps")
     cache_dir.mkdir(parents=True, exist_ok=True)
     
@@ -199,40 +165,61 @@ def generate_dataset(context: Context, n_samples: int=100, n_steps: int=20, max_
         print(f"Loading cached dataset from {file_path}...")
         data = np.load(file_path)
         return data['X'], data['y']
+        
+    # Check if a larger dataset exists and subsample from it
+    # We look for files matching the pattern but with different ns
+    for existing_file in cache_dir.glob(f"dataset_ns*_nst{n_steps}_gamma{gamma_val}.npz"):
+        try:
+            # Extract n_samples from filename
+            parts = existing_file.stem.split('_')
+            for p in parts:
+                if p.startswith('ns'):
+                    ns_existing = int(p[2:])
+                    if ns_existing > n_samples:
+                        print(f"Found larger dataset {existing_file.name} ({ns_existing} samples). Subsampling {n_samples} samples...")
+                        data = np.load(existing_file)
+                        X_full, y_full = data['X'], data['y']
+                        
+                        # Random subsample
+                        indices = np.random.choice(ns_existing, n_samples, replace=False)
+                        return X_full[indices], y_full[indices]
+        except Exception as e:
+            print(f"Failed to read/subsample {existing_file}: {e}")
+            continue
+
+    if file_path.exists(): # Double check just in case logic above fell through
+         pass
     
     n_shifters = len(context.interferometer.chip.φ)
     n_outputs = context.interferometer.chip.nb_raw_outputs
     
-    X = [] # Inputs: Flattened phase maps
-    y = [] # Targets: Correction phases
+    X = []
+    y = []
     
     wavelength = context.interferometer.λ
     
-    # Determine workers: prefer provided value; else use all logical cores
     if max_workers is None:
         max_workers = os.cpu_count() or 1
     physical_cores = psutil.cpu_count(logical=False) if psutil else None
     print(f"Generating dataset with {n_samples} samples... (workers={max_workers}, physical={physical_cores})")
 
     def _generate_one_sample(_seed: int=None):
-        # Use a deepcopy of the context to avoid shared mutable state across threads
-        local_ctx = copy.deepcopy(context)
+        # NO DEEPCOPY: Use shared context, pass dynamic phases
         # Generate random perturbation
         rng = np.random.default_rng(_seed)
         random_phases_rad = rng.uniform(0, 2*np.pi, n_shifters)
         # Convert to OPD
         random_opd = (random_phases_rad / (2*np.pi)) * wavelength.to(u.m).value * u.m
-        # Apply to local context
-        local_ctx.interferometer.chip.φ = random_opd
-        # Compute phase and visibility maps
-        phases_vector, visibilities_vector = get_phase_visibility_map_full(local_ctx, n_steps=n_steps)
-        # Input vector: concatenate phases and visibilities
+        
+        # Compute phase and visibility maps using explicit base_phases
+        # Pass context as is (it won't be modified)
+        phases_vector, visibilities_vector = get_phase_visibility_map_full(context, n_steps=n_steps, base_phases=random_opd)
+        
         x_row = np.concatenate([phases_vector, visibilities_vector])
-        # Target vector: [-sigma] % 2pi
         y_row = (-random_phases_rad) % (2*np.pi)
         return x_row, y_row
 
-    # Parallel execution with threads (NumPy/numba sections release the GIL)
+    # Parallel execution
     futures = []
     with ThreadPoolExecutor(max_workers=max_workers) as ex:
         for i in range(n_samples):
@@ -285,23 +272,36 @@ def generate_test_dataset(context: Context, test_phases: np.ndarray, n_repeats: 
     X = []
     y = []
     
-    print(f"Generating test dataset with {len(test_phases)*n_repeats} samples...")
+    # Generate random test samples (same distribution as training)
+    # This ensures we aren't testing on OOD data (uniform phases)
+    print(f"Generating random test dataset with {len(test_phases)*n_repeats} samples...")
     
-    for target_phase in tqdm(test_phases):
-        for _ in range(n_repeats):
-            # Ensure positive OPD by taking modulo 2pi
-            phase_val = (-target_phase) % (2*np.pi)
-            current_opd = (phase_val / (2*np.pi)) * wavelength.to(u.m).value * u.m
-            
-            context.interferometer.chip.φ = np.full(n_shifters, current_opd.value) * current_opd.unit
-            
-            # Get input map with phases and visibilities
-            phases_vector, visibilities_vector = get_phase_visibility_map_full(context, n_steps=n_steps)
-            
-            # Concatenate phases and visibilities
-            input_vector = np.concatenate([phases_vector, visibilities_vector])
-            X.append(input_vector)
-            y.append([target_phase] * n_shifters)
+    # We ignore test_phases values and just use the count
+    n_total_test = len(test_phases) * n_repeats
+    
+    local_ctx = copy.deepcopy(context)
+    
+    for i in tqdm(range(n_total_test)):
+        # Generate random perturbation
+        # Use a deterministic seed offset for reproducibility of test set
+        rng = np.random.default_rng(1000000 + i) 
+        random_phases_rad = rng.uniform(0, 2*np.pi, n_shifters)
+        
+        # Calculate OPD
+        random_opd = (random_phases_rad / (2*np.pi)) * wavelength.to(u.m).value * u.m
+        
+        # Get input map
+        # pass context as is
+        phases_vector, visibilities_vector = get_phase_visibility_map_full(context, n_steps=n_steps, base_phases=random_opd)
+        
+        # Concatenate
+        input_vector = np.concatenate([phases_vector, visibilities_vector])
+        X.append(input_vector)
+        
+        # Target: [-sigma] % 2pi
+        # Same as training: we want to predict the correction
+        y_row = (-random_phases_rad) % (2*np.pi)
+        y.append(y_row)
             
     X = np.array(X)
     y = np.array(y)
@@ -328,9 +328,12 @@ def preprocess_data(X, n_shifters, n_outputs, y=None):
     N = X.shape[0]
     
     # Split phases and visibilities
-    # X shape: (N, 1680) where first 840 are phases, last 840 are visibilities
-    phases = X[:, :840]  # (N, 840)
-    visibilities = X[:, 840:]  # (N, 840)
+    # X shape: (N, 2*M) where first M are phases, last M are visibilities
+    n_features = X.shape[1]
+    half_size = n_features // 2
+    
+    phases = X[:, :half_size]  # (N, half_size)
+    visibilities = X[:, half_size:]  # (N, half_size)
     
     # Convert phases to sin/cos
     phases_sin = np.sin(phases)
@@ -405,9 +408,16 @@ class CalibrationNet(nn.Module):
         # Input: (batch, 4410) = sin/cos phases + visibilities
         # Output: (batch, 28) = sin/cos for 14 shifter target phases
         
-        # Use LayerNorm instead of BatchNorm to avoid issues with small batches
+        # Scaling up for 100k dataset
+        # Width: 2048 -> 1024 -> 512 -> 256
+        
         self.network = nn.Sequential(
-            nn.Linear(input_size, 1024),
+            nn.Linear(input_size, 2048),
+            nn.ReLU(),
+            nn.LayerNorm(2048),
+            nn.Dropout(dropout_prob),
+            
+            nn.Linear(2048, 1024),
             nn.ReLU(),
             nn.LayerNorm(1024),
             nn.Dropout(dropout_prob),
@@ -422,12 +432,7 @@ class CalibrationNet(nn.Module):
             nn.LayerNorm(256),
             nn.Dropout(dropout_prob),
             
-            nn.Linear(256, 128),
-            nn.ReLU(),
-            nn.LayerNorm(128),
-            nn.Dropout(dropout_prob),
-            
-            nn.Linear(128, output_size * 2)  # sin/cos for each target
+            nn.Linear(256, output_size * 2)  # sin/cos for each target
         )
         
     def forward(self, x):
@@ -471,8 +476,8 @@ def train_calibration_model(X, y, n_shifters, n_outputs, epochs=500, learning_ra
     # Initialize model, loss function, and optimizer
     model = CalibrationNet(input_size, output_size, dropout_prob=dropout_prob)
     
-    # Use MSE Loss
-    criterion = nn.MSELoss()
+    # Use UnitCircleMSELoss to enforce sin^2+cos^2=1
+    criterion = UnitCircleMSELoss(lambda_reg=0.5)
     
     # Use AdamW with weight decay for regularization
     optimizer = optim.AdamW(model.parameters(), lr=learning_rate, weight_decay=1e-4)
@@ -505,7 +510,7 @@ def train_calibration_model(X, y, n_shifters, n_outputs, epochs=500, learning_ra
         
         scheduler.step(avg_loss)
         
-        if (epoch + 1) % 50 == 0 or epoch == epochs - 1:
+        if (epoch + 1) % 5 == 0 or epoch == epochs - 1:
             print(f"Epoch [{epoch+1}/{epochs}], Loss: {avg_loss:.6f}, LR: {optimizer.param_groups[0]['lr']:.6f}")
             
     print("Training complete.")
@@ -525,7 +530,10 @@ if __name__ == "__main__":
     parser.add_argument('--samples', type=int, default=2000, help='Number of training samples')
     parser.add_argument('--steps', type=int, default=20, help='Number of phase scan steps')
     parser.add_argument('--note', type=str, default="", help='Note for the log')
+    parser.add_argument('--batch-size', type=int, default=32, help='Batch size')
+    parser.add_argument('--gamma', type=float, default=9.0, help='Cophasing error (Gamma) in nm')
     parser.add_argument('--no-plot', action='store_true', help='Disable plotting')
+    parser.add_argument('--generate-only', action='store_true', help='Only generate dataset and exit')
     
     args = parser.parse_args()
     
@@ -540,7 +548,7 @@ if __name__ == "__main__":
     # Adjust parameters for this specific simulation
     ctx.h = 0 * u.hourangle
     ctx.Δh = 1 * u.hourangle
-    ctx.Γ = 10 * u.nm # Small cophasing error
+    ctx.Γ = args.gamma * u.nm # Small cophasing error
     
     # Adjust target to be a simple star without companions for calibration
     # Vega is magnitude 0 roughly. We want magnitude 5 (100x fainter).
@@ -554,6 +562,10 @@ if __name__ == "__main__":
     print("\n--- Generating Training Dataset ---")
     # Increased size and quality as requested
     X_train_raw, y_train_raw = generate_dataset(ctx, n_samples=args.samples, n_steps=args.steps)
+
+    if args.generate_only:
+        print(f"Dataset generated with {args.samples} samples. Exiting as requested.")
+        sys.exit(0)
     
     # Preprocess data (Phase -> Sin/Cos)
     X_train, y_train = preprocess_data(X_train_raw, n_shifters, n_outputs, y_train_raw)
@@ -563,7 +575,7 @@ if __name__ == "__main__":
     # Tuned hyperparameters for small dataset:
     # - Smaller hidden size to avoid overfitting
     # - Cosine Loss
-    model, loss_history = train_calibration_model(X_train, y_train, n_shifters, n_outputs, epochs=args.epochs, learning_rate=args.lr, dropout_prob=args.dropout)
+    model, loss_history = train_calibration_model(X_train, y_train, n_shifters, n_outputs, epochs=args.epochs, learning_rate=args.lr, dropout_prob=args.dropout, batch_size=args.batch_size)
     
     # --- 4. Test and Plot ---
     print("\n--- Testing and Plotting ---")
