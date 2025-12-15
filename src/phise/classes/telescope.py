@@ -113,11 +113,12 @@ def get_VLTI_UTs() -> list[Telescope]:
         list[Telescope]: Four `Telescope` objects positioned according to the
             standard UT configuration.
     """
-    r = np.array([[-70.4048732988764, -24.627602893919807], [-70.40465753243652, -24.627118902835786], [-70.40439460074228, -24.62681028261176], [-70.40384287956437, -24.627033500373024]])
-    r -= r[0]
-    earth_radius = 6378137 * u.m
-    UTs_elevation = 2635 * u.m
-    r = np.tan((r * u.deg).to(u.rad)) * (earth_radius + UTs_elevation)
+    r = np.array([
+        [0, 0],
+        [24.812, 50.837],
+        [54.840, 86.518],
+        [113.231, 64.334]
+    ]) * u.m
     a = 4 * np.pi * (4 * u.m) ** 2
     return [Telescope(a=a, r=pos, name=f'UT {i + 1}') for (i, pos) in enumerate(r)]
 
