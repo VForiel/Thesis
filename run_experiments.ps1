@@ -33,12 +33,19 @@ Write-Host "Starting neural calibration experiments..."
 # Experiment 6: High Frequency Updates (100k, BS=128, LR=0.001)
 # Previous successful 10k run had 78k updates. Exp 5 had only 9k.
 # Scaling updates: 100k samples / 128 BS = 781 steps/epoch. 100 epochs = 78k updates.
-Write-Host "`n=== Experiment 6: High Frequency Updates (100k, BS=128, LR=0.001) ===" -ForegroundColor Green
-.venv\Scripts\python src/analysis/neural_calibration.py --samples 100000 --epochs 100 --lr 0.001 --dropout 0.05 --steps 20 --gamma 9 --batch-size 128 --note "100k, BS=128, HighFreq" --no-plot
+# Write-Host "`n=== Experiment 6: High Frequency Updates (100k, BS=128, LR=0.001) ===" -ForegroundColor Green
+# .venv\Scripts\python src/analysis/neural_calibration.py --samples 100000 --epochs 100 --lr 0.001 --dropout 0.05 --steps 20 --gamma 9 --batch-size 128 --note "100k, BS=128, HighFreq" --no-plot
 
-# Overfit Test (100 samples)
-Write-Host "`n=== Experiment: Overfit Test (100 samples) ===" -ForegroundColor Green
-.venv\Scripts\python src/analysis/neural_calibration.py --samples 100 --epochs 500 --lr 0.001 --dropout 0.0 --steps 20 --gamma 9 --batch-size 32 --note "Overfit Test" --no-plot
+# Final Best Eperiment: Based on Exp 59 success (Loss 0.18)
+# Using 10k samples (since telescope changed, new physics needs validation first)
+# 500 epochs, BS=64, LR=0.001
+# Plotting ENABLED
+Write-Host "`n=== Final Best Experiment: 10k Samples, 500 Epochs ===" -ForegroundColor Green
+.venv\Scripts\python src/analysis/neural_calibration.py --samples 10000 --epochs 500 --lr 0.001 --dropout 0.05 --steps 20 --gamma 9 --batch-size 64 --note "Final Best 10k"
+
+# Overfit Test (Disabled)
+# Write-Host "`n=== Experiment: Overfit Test (100 samples) ===" -ForegroundColor Green
+# .venv\Scripts\python src/analysis/neural_calibration.py --samples 100 --epochs 500 --lr 0.001 --dropout 0.0 --steps 20 --gamma 9 --batch-size 32 --note "Overfit Test" --no-plot
 
 # Large Batch Speed Test
 # Write-Host "`n=== Experiment: BS=1024, LR=0.005 ===" -ForegroundColor Green

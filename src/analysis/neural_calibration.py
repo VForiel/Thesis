@@ -5,6 +5,7 @@ sys.path.append(str(Path.cwd() / "src"))
 
 import numpy as np
 from scipy.optimize import curve_fit
+import copy
 from copy import deepcopy
 import astropy.units as u
 from tqdm import tqdm
@@ -413,22 +414,22 @@ class CalibrationNet(nn.Module):
         
         self.network = nn.Sequential(
             nn.Linear(input_size, 2048),
-            nn.ReLU(),
+            nn.LeakyReLU(0.1),
             nn.LayerNorm(2048),
             nn.Dropout(dropout_prob),
             
             nn.Linear(2048, 1024),
-            nn.ReLU(),
+            nn.LeakyReLU(0.1),
             nn.LayerNorm(1024),
             nn.Dropout(dropout_prob),
             
             nn.Linear(1024, 512),
-            nn.ReLU(),
+            nn.LeakyReLU(0.1),
             nn.LayerNorm(512),
             nn.Dropout(dropout_prob),
             
             nn.Linear(512, 256),
-            nn.ReLU(),
+            nn.LeakyReLU(0.1),
             nn.LayerNorm(256),
             nn.Dropout(dropout_prob),
             
@@ -663,6 +664,12 @@ if __name__ == "__main__":
         plt.legend()
         plt.grid(True)
         
+        plot_dir = Path("generated/plots")
+        plot_dir.mkdir(parents=True, exist_ok=True)
+        plot_path = plot_dir / f"calibration_result_loss{final_loss:.4f}.png"
+        
         plt.tight_layout()
-        plt.show()
+        plt.savefig(plot_path)
+        print(f"Plot saved to {plot_path}")
+        # plt.show()
 

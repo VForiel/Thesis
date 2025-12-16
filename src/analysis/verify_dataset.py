@@ -6,7 +6,7 @@ import sys
 sys.path.append(str(Path.cwd() / "src"))
 
 # Load the dataset
-file_path = Path('generated/dataset/phase_maps/dataset_ns100000_nst20_gamma9.npz')
+file_path = Path('generated/dataset/phase_maps/dataset_ns10000_nst20_gamma9.npz')
 if not file_path.exists():
     print(f"Dataset not found: {file_path}")
     sys.exit(1)

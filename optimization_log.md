@@ -57,3 +57,6 @@
 | 1765631312 | Epochs=200, LR=0.001, Drop=0.05, Samples=10000 | 0.285134 | 3.188285 (Train: 0.377346) | 1387.92s | BS=128 |
 | 1765632672 | Epochs=200, LR=0.005, Drop=0.05, Samples=10000 | 0.291358 | 3.137645 (Train: 0.431744) | 1355.72s | BS=128, LR=0.005 |
 | 1765639919 | Epochs=500, LR=0.001, Drop=0.05, Samples=10000 | 0.180337 | 3.347411 (Train: 0.174075) | 7241.66s | 500 epochs, BS=64 |
+| 1765819962 | Epochs=500, LR=0.001, Drop=0.0, Samples=100 | 0.813618 | 3.349980 (Train: 2.947517) | 85.07s | Overfit Test Debug |
+| 1765820096 | Epochs=5, LR=0.001, Drop=0.05, Samples=10000 | 0.875142 | 3.328531 (Train: 3.251611) | 26.78s | Short Run for Plots |
+| 1765820229 | Epochs=5, LR=0.001, Drop=0.05, Samples=10000 | 0.873799 | 3.273241 (Train: 3.255003) | 26.39s | Short Run Plot Saved |
