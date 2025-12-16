@@ -376,7 +376,7 @@ class Context:
 
     # Plot transmission maps --------------------------------------------------
 
-    def plot_transmission_maps(self, N:int, return_plot:bool = False, grad=False) -> None:
+    def plot_transmission_maps(self, N:int, return_plot:bool = False, grad=False, auto_save_dir=None) -> None:
         
         # Get transmission maps
         if grad:
@@ -450,6 +450,13 @@ class Context:
             transmissions += ",   ".join([f"{self.interferometer.chip._raw_output_labels[o]}: {raw_outs[o]*100:.2f}%" for o in range(nb_raw_outs)]) + linebreak
             transmissions += ",   ".join([f"{self.interferometer.chip._processed_output_labels[o]}: {processed_outs[o]*100:.2f}%" for o in range(nb_processed_outs)])
 
+        # Auto-save logic
+        if auto_save_dir:
+            from pathlib import Path
+            output_dir = Path(auto_save_dir)
+            output_dir.mkdir(parents=True, exist_ok=True)
+            plt.savefig(output_dir / "transmission_maps.png", dpi=300, bbox_inches='tight')
+        
         if return_plot:
             plot = BytesIO()
             plt.savefig(plot, format='png')
@@ -458,12 +465,13 @@ class Context:
         plt.show()
         print(transmissions)
 
-    def plot_analytical_transmission_maps(self, N:int, return_plot:bool = False) -> None:
+    def plot_analytical_transmission_maps(self, N:int, return_plot:bool = False, auto_save_dir=None) -> None:
         """Plot the analytical transmission maps (Bright + 6 Darks + 3 Kernels).
 
         Args:
             N (int): Map resolution.
             return_plot (bool): If True, return the plot as bytes instead of showing it.
+            auto_save_dir (str or Path): Directory to automatically save figures.
         """
         
         # Get analytical maps
@@ -551,6 +559,13 @@ class Context:
             # Kernels
             k_str = ", ".join([f"K{i+1}: {val*100:.2f}%" for i, val in enumerate(k)])
             transmissions += k_str + linebreak
+
+        # Auto-save logic
+        if auto_save_dir:
+            from pathlib import Path
+            output_dir = Path(auto_save_dir)
+            output_dir.mkdir(parents=True, exist_ok=True)
+            plt.savefig(output_dir / "analytical_transmission_maps.png", dpi=300, bbox_inches='tight')
 
         if return_plot:
             plot = BytesIO()

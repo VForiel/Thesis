@@ -37,8 +37,29 @@
 \maketitle
 
 \begin{abstract}
-L'interférométrie à annulation par noyau (Kernel-Nulling) \cite{Martinache2018} représente une approche prometteuse pour la détection directe d'exoplanètes. Cette technique génère des distributions d'intensité caractéristiques selon la présence ou l'absence d'un compagnon planétaire. L'analyse statistique de ces distributions est essentielle pour une détection robuste de planètes \cite{Hanot2011}. Nous développons et comparons plusieurs tests statistiques pour discriminer efficacement entre les hypothèses $\mathcal{H}_0$ (étoile seule) et $\mathcal{H}_1$ (système étoile-planète). Nous analysons les performances de différentes statistiques de test afin d'évaluer la pertinence de chacun d'eux en fonction de la nature des données à disposition. Nous effectuons des simulations numériques pour trois scenarios instrumentaux : les configurations VLTI au sol \cite{Chingaipe2023} et celle de LIFE dans l'espace ainsi qu'un scénario fictif consistant à placer le VLTI dans l'espace afin d'isoler les pertes de performance causées par l'atmosphère. Pour chaque scénario, nous générons des jeux de données sous les deux hypothèses $\mathcal{H}_0$ et $\mathcal{H}_1$, en tenant compte des paramètres instrumentaux spécifiques et des niveaux de bruit. Nous évaluons les performances des tests en utilisant les courbes ROC et l'analyse des valeurs P. Cette analyse statistique, actuellement appliquée à des données simulées, ouvre la voie à une détection robuste d'exoplanètes à haut contraste utilisant l'interférométrie à annulation par noyau.
+L'interférométrie à annulation par noyau (Kernel-Nulling) \cite{Martinache2018,Laugier2021,Chingaipe2024} représente une approche prometteuse pour la détection directe d'exoplanètes. Cette technique produit des observables auto-calibrés qui, dans le cas d'une étoile seule dans l'axe de visée (hypothèse $\mathcal{H}_0$), suivent une distribution symétrique et étroite centrée en zéro. Cette propriété constitue un avantage majeur pour l'analyse statistique robuste, facilitant la détection de toute déviation induite par la présence d'un compagnon planétaire. Nous utilisons des simulations Monte Carlo pour générer les distributions de sortie du Kernel-Nulling dans trois configurations distinctes : étoile seule, compagnon seul, et système étoile-planète. L'étude de ces trois distributions nous permet d'établir des modèles statistiques spécifiques aux deux hypothèses de détection : $\mathcal{H}_0$ (étoile seule) et $\mathcal{H}_1$ (système étoile-planète). Ces modèles nous permettent de développer des tests statistiques ciblés et d'analyser leurs performances théoriques. Nous comparons plusieurs statistiques de test pour discriminer efficacement entre les deux hypothèses, puis évaluons leurs performances sur des simulations numériques de configurations instrumentales représentatives (interférométrie au sol et dans l'espace) en utilisant les courbes ROC et l'analyse des valeurs P. Cette analyse statistique, actuellement appliquée à des données simulées, permet d'évaluer les performances qu'on pourrait espérer obtenir lors du déploiement d'un tel système sur un observatoire réel, ouvrant ainsi la voie à une détection robuste d'exoplanètes à haut contraste utilisant l'interférométrie à annulation par noyau.
 \end{abstract}
+
+%==============================================================================
+\section{Introduction}
+%==============================================================================
+
+La détection directe d'exoplanètes constitue l'un des défis majeurs de l'astronomie moderne, confronté à deux obstacles fondamentaux. Premièrement, la séparation angulaire entre une planète et son étoile est extrêmement faible : de quelques dizaines à quelques centaines de millisecondes d'arc pour les systèmes les plus proches. Deuxièmement, le contraste lumineux planète-étoile est extrêmement élevé, allant de $10^{-6}$ à $10^{-7}$ dans l'infrarouge thermique jusqu'à $10^{-10}$ dans le visible. Ces deux contraintes combinées rendent l'observation directe particulièrement ardue.
+
+L'interférométrie à annulation (nulling interferometry) offre une solution élégante à ces deux problèmes en exploitant les interférences destructives pour supprimer la lumière stellaire tout en préservant celle du compagnon planétaire \cite{Bracewell1979}. Cette technique repose sur la combinaison cohérente de la lumière collectée par plusieurs télescopes de façon à créer une frange sombre (null) dans la direction de l'étoile. Le principe a été démontré avec succès dans plusieurs expériences au sol \cite{Angel1997,Hanot2011}, y compris récemment avec des composants photoniques intégrés \cite{Norris2020}.
+
+Cependant, les techniques de nulling classiques souffrent de deux limitations majeures. Premièrement, elles sont extrêmement sensibles aux erreurs instrumentales (différences de chemins optiques, fluctuations de phase, variations d'amplitude). Deuxièmement, l'observable directe (la profondeur de null) est difficile à calibrer de manière absolue, car elle dépend de nombreux paramètres instrumentaux susceptibles de varier au cours de l'observation.
+
+Le Kernel-Nulling \cite{Martinache2018} représente une avancée conceptuelle importante qui permet de s'affranchir de ces limitations. Inspiré par les techniques de kernel-phase développées pour l'imagerie à haute résolution angulaire, le Kernel-Nulling construit des observables linéairement indépendantes qui sont insensibles aux erreurs de phase du premier ordre affectant individuellement les entrées du combineur interférométrique. Ces quantités, appelées kernels, sont auto-calibrées et conservent néanmoins toute l'information astrophysique contenue dans les franges nullées \cite{Laugier2020,Laugier2021}.
+
+Une propriété fondamentale du Kernel-Nulling, particulièrement intéressante pour la détection statistique, est que les kernels présentent une distribution de sortie caractéristique. En l'absence de compagnon (hypothèse $\mathcal{H}_0$), cette distribution est symétrique et centrée en zéro, avec une largeur principalement déterminée par les erreurs de piston résiduelles induites par la turbulence atmosphérique (pour les observations au sol) ainsi que les défauts instrumentaux qui peuvent être grandement réduits grâce à l'utilisation de composants photoniques actifs \hl{[Citer papier calibration]}. Pour cette raison, et parce que l'objectif de cette étude est de démontrer le potentiel théorique d'un tel système de détection, nous nous plaçons dans le contexte d'un instrument quasi idéal, limité uniquement par les contraintes physiques fondamentales telles que la turbulence atmosphérique et le bruit photonique. La présence d'un compagnon planétaire (hypothèse $\mathcal{H}_1$) modifie cette distribution de manière spécifique, induisant généralement un décalage de la moyenne et potentiellement un changement de forme.
+
+Cette signature statistique distincte ouvre la voie à des méthodes de détection basées sur des tests d'hypothèses. Récemment, Dannert et al. \cite{Dannert2025} ont proposé un modèle analytique décrivant la distribution des kernels sous l'hypothèse nulle $\mathcal{H}_0$ (étoile seule), tenant compte des effets du bruit instrumental non-gaussien. Cependant, la forme analytique exacte des distributions pour le cas du compagnon seul ainsi que pour le système étoile-planète complet (hypothèse $\mathcal{H}_1$) demeure inconnue, rendant difficile l'application directe de tests paramétriques optimaux pour la détection.
+
+%==============================================================================
+\section{Modélisation statistique et tests de détection}
+\label{sec:tests}
+%==============================================================================
 
 \subsection{Tests statistiques}
 
@@ -61,7 +82,7 @@ Le test du rapport de vraisemblance (LR) consiste à comparer la probabilité d'
     \Lambda(x) = \frac{p(x;\mathcal{H}_1)}{p(x;\mathcal{H}_0)}
 \end{equation}
 Ce test est optimal au sens de Neyman-Pearson. Cependant, il nécessite une connaissance analytique des distributions, qui est ici inconnue.
-Une première approche pour approximer ce test consiste à ajuster des modèles paramétriques (Cauchy, Laplace) sur les distributions simulées, comme discuté précédemment. Cela permet de construire un test de rapport de vraisemblance basé sur ces lois ajustées.
+Une première approche pour approximer ce test consiste à ajuster des modèles paramétriques (Cauchy, Laplace) sur les distributions simulées \cite{Hanot2011}, comme discuté précédemment. Cela permet de construire un test de rapport de vraisemblance basé sur ces lois ajustées.
 
 %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -69,7 +90,7 @@ Une première approche pour approximer ce test consiste à ajuster des modèles 
 
 Une alternative puissante, qui ne nécessite pas de connaître la forme analytique exacte de la distribution des sorties du nuller mais qui exploite la connaissance du modèle instrumental direct, est le rapport de vraisemblance généralisé (GLR).
 
-Le principe est d'utiliser le modèle direct de l'instrument pour prédire le signal attendu pour une position et un contraste de planète donnés, et de comparer les résidus observés sous les deux hypothèses.
+Le principe est d'utiliser le modèle direct de l'instrument pour prédire le signal attendu pour une position et un contraste de planète donnés, et de comparer les résidus observés sous les deux hypothèses \cite{Martinod2025,Huber2025}.
 Si l'on suppose que le bruit (après soustraction du modèle) suit une loi connue (par exemple gaussienne ou approximativement gaussienne en raison du théorème central limite sur un grand nombre de données, ou une loi à queues lourdes modélisée empiriquement), on peut écrire la vraisemblance.
 
 Sous $\mathcal{H}_0$ (pas de planète), le signal attendu est nul (ou égal au fond résiduel). Sous $\mathcal{H}_1$, le signal dépend des paramètres de la planète $\theta$ (position, contraste). Le GLR consiste à maximiser la vraisemblance sous $\mathcal{H}_1$ par rapport à ces paramètres inconnus :
@@ -137,6 +158,7 @@ Nous avons également exploré d'autres tests (Cramer-von Mises, Wilcoxon-Mann-W
 
 %==============================================================================
 \section{Généralisation}
+\label{sec:generalisation}
 %==============================================================================
 
 Jusqu'à présent, nous avons considéré l'analyse d'une seule sortie de Kernel-Nulling (un seul noyau) pour une seule configuration instrumentale. Cependant, les instruments réels comme le VLTI ou LIFE produisent plusieurs sorties Kernel simultanées (K1, K2, K3, etc.) \cite{Laugier2020} et l'observation se fait souvent sur plusieurs poses (rotation de la ligne de base) pour couvrir le plan (u,v).
@@ -156,9 +178,29 @@ Pour des statistiques comme la médiane ou la MAV, une approche consiste à calc
 Les observations à différents angles de rotation sont temporellement décorrélées (si le temps entre poses est supérieur au temps de cohérence atmosphérique). L'information planétaire varie d'une pose à l'autre (modulation du signal).
 Le GLR exploite parfaitement cette modulation : le modèle direct $p(x | \theta, \mathcal{H}_1)$ prédit exactement cette variation en fonction de la position $\theta$ testée. C'est ici que le GLR prend tout son sens par rapport aux tests scalaires simples (comme la médiane globale) qui pourraient "moyennner" le signal planétaire variable.
 
+%==============================================================================
+\section{Scénarios instrumentaux}
+\label{sec:scenarios}
+%==============================================================================
+
+Pour évaluer la robustesse et les performances des tests statistiques proposés, nous effectuons des simulations numériques pour trois scénarios instrumentaux représentatifs :
+
+\begin{enumerate}
+    \item \textbf{VLTI au sol} \cite{Chingaipe2023,Chingaipe2022,Cvetojevic2022} : Configuration utilisant notre système de Kernel-Nulling développé en laboratoire au foyer du Very Large Telescope Interferometer. Ce scénario est dominé par le bruit atmosphérique (turbulence, piston, seeing variable).
+    
+    \item \textbf{LIFE dans l'espace} \cite{Hansen2022,Greijn2025} : Configuration spatiale du Large Interferometer For Exoplanets, offrant un environnement stable sans perturbations atmosphériques. Le bruit est principalement instrumental (détecteur, thermique, photonique).
+    
+    \item \textbf{VLTI fictif dans l'espace} : Scénario hypothétique permettant d'isoler l'impact de l'atmosphère en comparant les performances du VLTI dans un environnement spatial. Cette configuration permet de quantifier les pertes de performance causées uniquement par les effets atmosphériques.
+\end{enumerate}
+
+Il convient de noter que ces scénarios demeurent actuellement prospectifs : notre composant photonique, dérivé des technologies réseau et télécom, fonctionne à 1.55 $\mu$m et nécessiterait une adaptation technologique pour opérer aux longueurs d'onde scientifiques appropriées (bande H, K, ou L pour l'observation d'exoplanètes).
+
+Pour chaque scénario, nous générons des jeux de données Monte Carlo sous les deux hypothèses $\mathcal{H}_0$ et $\mathcal{H}_1$, en tenant compte des paramètres instrumentaux spécifiques (diamètre des télescopes, baselines, efficacité quantique, bruits de détection) et des sources de bruit caractéristiques (atmosphérique pour le VLTI au sol, instrumental pour les configurations spatiales).
+
 %--------------------------------------------------------------------
 
 \section{Résultats}
+\label{sec:resultats}
 
 \subsection{Courbes ROC}
 
@@ -207,6 +249,7 @@ La robustesse des tests basés sur la médiane (Médiane, MAV) face aux valeurs 
 %-----------------------------------------------------------------
 
 \section{Conclusion}
+\label{sec:conclusion}
 
 Dans cette étude, nous avons analysé les propriétés statistiques des sorties de Kernel-Nulling et évalué plusieurs méthodes de détection.
 

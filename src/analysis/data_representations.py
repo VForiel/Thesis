@@ -80,7 +80,7 @@ def compute_analytical_distrib(n, ctx, opd_errors, α, β, φ1, φ2, φ3, φ4):
 #==============================================================================
 
 def instant_distribution(ctx: Context=None, n=10000, stat=np.median, figsize=(10, 10), compare=True, r=1, log=False, density = False, 
-    sync_plots = True, save_path=None, show=True) -> np.ndarray:
+    sync_plots = True, save_path=None, show=True, auto_save_dir=None) -> np.ndarray:
     """
     Get the instantaneous distribution of the kernel nuller.
 
@@ -96,6 +96,8 @@ def instant_distribution(ctx: Context=None, n=10000, stat=np.median, figsize=(10
         Path to save the figure. If None, figure is not saved.
     show : bool, optional
         Whether to show the plot. Default is True.
+    auto_save_dir : str or Path, optional
+        Directory to automatically save figures. If provided, figures are saved with automatic naming.
 
     Returns
     -------
@@ -307,7 +309,16 @@ def instant_distribution(ctx: Context=None, n=10000, stat=np.median, figsize=(10
         axs[2,1].set_xlabel('Kernel output')
         axs[2,2].set_xlabel('Kernel output')
         
-        if save_path:
+        # Auto-save logic
+        if auto_save_dir:
+            from pathlib import Path
+            output_dir = Path(auto_save_dir)
+            output_dir.mkdir(parents=True, exist_ok=True)
+            
+            scenario_names = ['star_only', 'planet_only', 'full']
+            fname = output_dir / f"instant_distribution_{scenario_names[i]}.png"
+            plt.savefig(fname, dpi=300, bbox_inches='tight')
+        elif save_path:
             # If multiple figures, append suffix
             fname = save_path
             if i > 0:
@@ -409,7 +420,7 @@ def instant_distribution(ctx: Context=None, n=10000, stat=np.median, figsize=(10
 
     return (data, data_so)
 
-def time_evolution(ctx: Context=None, n=100, map=np.median) -> np.ndarray:
+def time_evolution(ctx: Context=None, n=100, map=np.median, auto_save_dir=None, show=True) -> np.ndarray:
     """
     Get the time evolution of the kernel nuller.
 
@@ -421,6 +432,10 @@ def time_evolution(ctx: Context=None, n=100, map=np.median) -> np.ndarray:
         The number of samples to take at a given time, by default 1000.
     map : function, optional
         The function to use to map the data, by default np.median.
+    auto_save_dir : str or Path, optional
+        Directory to automatically save figures. If provided, figures are saved with automatic naming.
+    show : bool, optional
+        Whether to show the plot. Default is True.
 
     Returns
     -------
@@ -490,5 +505,17 @@ def time_evolution(ctx: Context=None, n=100, map=np.median) -> np.ndarray:
 
         outs_po = ctx_po.observe()
         ref_data_po[i, :] = ctx_po.interferometer.chip.process_outputs(outs_po)
+
+    # Auto-save logic
+    if auto_save_dir:
+        from pathlib import Path
+        output_dir = Path(auto_save_dir)
+        output_dir.mkdir(parents=True, exist_ok=True)
+        plt.savefig(output_dir / "time_evolution.png", dpi=300, bbox_inches='tight')
+    
+    if show:
+        plt.show()
+    else:
+        plt.close()
 
     return data, ref_data
