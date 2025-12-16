@@ -9,9 +9,11 @@ import astropy.units as u
 from scipy.optimize import minimize
 from scipy import stats
 from phise import Context
+from phise.modules import utils
 from phise.modules.test_statistics import ALL_TESTS
 import phise.modules.test_statistics as ts
 import scipy.special
+from phise.modules import utils
 
 def roc(t0: np.ndarray, t1: np.ndarray, test: callable):
     t0_stats = np.array([test(t0[i], t0[i + 1]) if i + 1 < t0.shape[0] else test(t0[i], t0[0]) for i in range(t0.shape[0])])
@@ -29,7 +31,7 @@ def roc(t0: np.ndarray, t1: np.ndarray, test: callable):
         pfa.append(fp / (fp + tn))
     return (np.array(pfa), np.array(pdet), thresholds)
 
-def plot_rocs(t0: np.ndarray, t1: np.ndarray, tests: dict=ALL_TESTS, figsize=(6, 6)):
+def plot_rocs(t0: np.ndarray, t1: np.ndarray, tests: dict=ALL_TESTS, figsize=(6, 6), save_as=None):
     plt.figure(figsize=figsize, constrained_layout=True)
     for (name, test) in tests.items():
         (pfa, pdet, thresholds) = roc(t0, t1, test)
@@ -41,9 +43,12 @@ def plot_rocs(t0: np.ndarray, t1: np.ndarray, tests: dict=ALL_TESTS, figsize=(6,
     plt.ylabel('True Positive Rate')
     plt.title('ROC Curve')
     plt.legend()
+    plt.legend()
+    if save_as:
+        utils.save_plot(save_as, "roc_curves.png")
     plt.show()
 
-def test_power(ctx=None, tests=ALL_TESTS, nmc=100, bootstrap=10, resolution=10, maxpoints=1000):
+def test_power(ctx=None, tests=ALL_TESTS, nmc=100, bootstrap=10, resolution=10, maxpoints=1000, save_as=None):
 
     # Build context
     if ctx is None:
@@ -102,8 +107,10 @@ def test_power(ctx=None, tests=ALL_TESTS, nmc=100, bootstrap=10, resolution=10, 
     axs[0].set_title('AUC (global power)')
     axs[1].set_title('Power ($P_{det}$ at $P_{fa}<1\\%$)')
     plt.legend()
+    if save_as:
+        utils.save_plot(save_as, "test_power.png")
 
-def plot_p_values(t0, t1, tests=ALL_TESTS):
+def plot_p_values(t0, t1, tests=ALL_TESTS, save_as=None):
     col = min(2, len(tests))
     row = int(np.ceil(len(tests) / col))
     (_, axs) = plt.subplots(row, col, figsize=(5 * col, 5 * row))
@@ -124,6 +131,10 @@ def plot_p_values(t0, t1, tests=ALL_TESTS):
         axs[t].set_ylabel('P-value')
         axs[t].set_title(f'P-values for {ts_name}')
         axs[t].legend()
+        axs[t].set_title(f'P-values for {ts_name}')
+        axs[t].legend()
+    if save_as:
+        utils.save_plot(save_as, "p_values.png")
     plt.show()
 
 #==============================================================================
@@ -145,7 +156,7 @@ def imb(z, μ, σ, ν):
 
     return (a / b) * c**v * k
 
-def np_benchmark(ctx: Context=None):
+def np_benchmark(ctx: Context=None, save_as=None):
 
     # Build H1 context
     if ctx is None:
@@ -236,6 +247,8 @@ def np_benchmark(ctx: Context=None):
     plt.ylabel('Density')
     plt.title('Distributions and Fits')
     plt.legend()
+    if save_as:
+        utils.save_plot(save_as, "distributions.png")
     plt.show()
 
     # Generate random distributions from the fitted models

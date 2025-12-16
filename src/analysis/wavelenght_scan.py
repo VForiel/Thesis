@@ -14,8 +14,9 @@ from copy import deepcopy as copy
 import astropy.units as u
 from scipy import stats
 from phise.classes.context import Context
+from phise.modules import utils
 
-def run(ctx: Context=None, Δλ=0.2 * u.um, n=11, figsize=(5, 5)):
+def run(ctx: Context=None, Δλ=0.2 * u.um, n=11, figsize=(5, 5), save_as=None):
 
     # Ensure n is odd (centered on λ0)
     if n % 2 == 0:
@@ -64,4 +65,7 @@ def run(ctx: Context=None, Δλ=0.2 * u.um, n=11, figsize=(5, 5)):
     plt.yscale('log')
     plt.title('Wavelength scan')
     plt.legend()
+    plt.legend()
+    if save_as:
+        utils.save_plot(save_as, "wavelength_scan.png")
     plt.show()

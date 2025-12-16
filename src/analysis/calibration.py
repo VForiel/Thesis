@@ -8,8 +8,9 @@ import astropy.units as u
 from scipy.stats import linregress
 from copy import deepcopy as copy
 from phise import Context
+from phise.modules import utils
 
-def genetic_approach(ctx: Context=None, β: float=0.9, verbose=False, figsize=(10, 10), σ_rms=None):
+def genetic_approach(ctx: Context=None, β: float=0.9, verbose=False, figsize=(10, 10), σ_rms=None, save_as=None):
     if ctx is None:
         ctx = Context.get_VLTI()
     else:
@@ -17,11 +18,11 @@ def genetic_approach(ctx: Context=None, β: float=0.9, verbose=False, figsize=(1
     ctx.Γ = 0 * u.nm
     ctx.target.companions = []
     print_kernel_null_depth_lab_space_atm(ctx)
-    ctx.calibrate_gen(β=β, plot=True, verbose=verbose, figsize=figsize)
+    ctx.calibrate_gen(β=β, plot=True, verbose=verbose, figsize=figsize, save_as=save_as)
     print_kernel_null_depth_lab_space_atm(ctx)
     return ctx
 
-def obstruction_approach(ctx: Context=None, n: int=1000, figsize=(10, 10)):
+def obstruction_approach(ctx: Context=None, n: int=1000, figsize=(10, 10), save_as=None):
     if ctx is None:
         ctx = Context.get_VLTI()
     else:
@@ -29,7 +30,7 @@ def obstruction_approach(ctx: Context=None, n: int=1000, figsize=(10, 10)):
     ctx.Γ = 0 * u.nm
     ctx.target.companions = []
     print_kernel_null_depth_lab_space_atm(ctx)
-    ctx.calibrate_obs(n=n, plot=True, figsize=(10, 10))
+    ctx.calibrate_obs(n=n, plot=True, figsize=(10, 10), save_as=save_as)
     print_kernel_null_depth_lab_space_atm(ctx)
     return ctx
 
@@ -66,7 +67,7 @@ def print_kernel_null_depth(ctx: Context, N=100):
     print('   Med:  ' + ' | '.join([f'{i / b_mean:.2e}' for i in k_med]))
     print('   Std:  ' + ' | '.join([f'{i / b_mean:.2e}' for i in k_std]))
 
-def compare_approaches(ctx: Context=None, β: float=0.9, n: int=10000, figsize=(10, 10)):
+def compare_approaches(ctx: Context=None, β: float=0.9, n: int=10000, figsize=(10, 10), save_as=None):
     if ctx is None:
         ctx = Context.get_VLTI()
         ctx.monochromatic = True
@@ -135,4 +136,7 @@ def compare_approaches(ctx: Context=None, β: float=0.9, n: int=10000, figsize=(
     plt.yscale('log')
     plt.title('Efficiency of the calibration approaches')
     plt.legend()
+    plt.legend()
+    if save_as:
+        utils.save_plot(save_as, "compare_approaches.png")
     plt.show()

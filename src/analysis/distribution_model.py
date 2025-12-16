@@ -12,7 +12,7 @@ from scipy.optimize import curve_fit
 import matplotlib.pyplot as plt
 from phise import Context
 
-def fit(ctx: Context=None):
+def fit(ctx: Context=None, save_as: str = None):
     """"fit.
 
 Parameters
@@ -100,4 +100,7 @@ Returns
     plt.legend()
     plt.ylim(bottom=0.1, top=100.0)
     plt.grid()
+    if save_as:
+        from phise.modules import utils
+        utils.save_plot(save_as, "distribution_fit.png")
     plt.show()

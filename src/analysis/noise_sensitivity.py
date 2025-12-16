@@ -12,8 +12,9 @@ except Exception:
     pass
 from copy import deepcopy as copy
 from phise.classes.context import Context
+from phise.modules import utils
 
-def plot(ctx: Context=None, β=0.5, n=1000, γ=10*u.nm, figsize=(15, 5)):
+def plot(ctx: Context=None, β=0.5, n=1000, γ=10*u.nm, figsize=(15, 5), save_as=None):
     """
     Plot the sensitivity to input noise
 
@@ -99,3 +100,5 @@ def plot(ctx: Context=None, β=0.5, n=1000, γ=10*u.nm, figsize=(15, 5)):
     ax.set_ylabel('Kernel-Null depth')
     ax.set_title('Sensitivity to noise')
     ax.legend()
+    if save_as:
+        utils.save_plot(save_as, "noise_sensitivity.png")

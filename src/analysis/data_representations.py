@@ -14,6 +14,7 @@ except Exception:
     pass
 from phise import Context
 from phise.classes.archs.superkn import expected_outputs_jit
+from phise.modules import utils
 
 π = np.pi
 
@@ -80,7 +81,7 @@ def compute_analytical_distrib(n, ctx, opd_errors, α, β, φ1, φ2, φ3, φ4):
 #==============================================================================
 
 def instant_distribution(ctx: Context=None, n=10000, stat=np.median, figsize=(10, 10), compare=True, r=1, log=False, density = False, 
-    sync_plots = True, save_path=None, show=True, auto_save_dir=None) -> np.ndarray:
+    sync_plots = True, save_path=None, show=True, save_as=None) -> np.ndarray:
     """
     Get the instantaneous distribution of the kernel nuller.
 
@@ -96,8 +97,8 @@ def instant_distribution(ctx: Context=None, n=10000, stat=np.median, figsize=(10
         Path to save the figure. If None, figure is not saved.
     show : bool, optional
         Whether to show the plot. Default is True.
-    auto_save_dir : str or Path, optional
-        Directory to automatically save figures. If provided, figures are saved with automatic naming.
+    save_as : str, optional
+        Path or directory to save the figures. If provided, figures are saved with automatic naming if it's a directory.
 
     Returns
     -------
@@ -310,14 +311,9 @@ def instant_distribution(ctx: Context=None, n=10000, stat=np.median, figsize=(10
         axs[2,2].set_xlabel('Kernel output')
         
         # Auto-save logic
-        if auto_save_dir:
-            from pathlib import Path
-            output_dir = Path(auto_save_dir)
-            output_dir.mkdir(parents=True, exist_ok=True)
-            
+        if save_as:
             scenario_names = ['star_only', 'planet_only', 'full']
-            fname = output_dir / f"instant_distribution_{scenario_names[i]}.png"
-            plt.savefig(fname, dpi=300, bbox_inches='tight')
+            utils.save_plot(save_as, f"instant_distribution_{scenario_names[i]}.png")
         elif save_path:
             # If multiple figures, append suffix
             fname = save_path
@@ -420,7 +416,7 @@ def instant_distribution(ctx: Context=None, n=10000, stat=np.median, figsize=(10
 
     return (data, data_so)
 
-def time_evolution(ctx: Context=None, n=100, map=np.median, auto_save_dir=None, show=True) -> np.ndarray:
+def time_evolution(ctx: Context=None, n=100, map=np.median, save_as=None, show=True) -> np.ndarray:
     """
     Get the time evolution of the kernel nuller.
 
@@ -432,8 +428,8 @@ def time_evolution(ctx: Context=None, n=100, map=np.median, auto_save_dir=None, 
         The number of samples to take at a given time, by default 1000.
     map : function, optional
         The function to use to map the data, by default np.median.
-    auto_save_dir : str or Path, optional
-        Directory to automatically save figures. If provided, figures are saved with automatic naming.
+    save_as : str, optional
+        Path or directory to save the figures.
     show : bool, optional
         Whether to show the plot. Default is True.
 
@@ -477,9 +473,9 @@ def time_evolution(ctx: Context=None, n=100, map=np.median, auto_save_dir=None, 
 
     # Sample data
     for i, h in enumerate(ctx.get_h_range()):
-        ctx.h = h * u.rad
-        ctx_so.h = h * u.rad
-        ctx_po.h = h * u.rad
+        ctx.h = h
+        ctx_so.h = h
+        ctx_po.h = h
 
         # Generate noise
         upstream_pistons = np.random.normal(0, ctx.Γ.value, size=(n, len(ctx.interferometer.telescopes))) * ctx.Γ.unit
@@ -507,11 +503,8 @@ def time_evolution(ctx: Context=None, n=100, map=np.median, auto_save_dir=None, 
         ref_data_po[i, :] = ctx_po.interferometer.chip.process_outputs(outs_po)
 
     # Auto-save logic
-    if auto_save_dir:
-        from pathlib import Path
-        output_dir = Path(auto_save_dir)
-        output_dir.mkdir(parents=True, exist_ok=True)
-        plt.savefig(output_dir / "time_evolution.png", dpi=300, bbox_inches='tight')
+    if save_as:
+        utils.save_plot(save_as, "time_evolution.png")
     
     if show:
         plt.show()

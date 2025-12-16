@@ -10,7 +10,7 @@ import ipywidgets as widgets
 from IPython.display import display
 from phise import Context
 
-def gui(ctx: Context=None, N: int=100):
+def gui(ctx: Context=None, N: int=100, save_as=None):
     """
     GUI to visualize the transmission maps of the VLTI.
     Parameters
@@ -26,6 +26,9 @@ def gui(ctx: Context=None, N: int=100):
         ref_ctx.interferometer.chip.σ = np.zeros(14) * u.um
     else:
         ref_ctx = ctx
+        
+
+
     h_slider = widgets.FloatSlider(value=0, min=(ref_ctx.h - ref_ctx.Δh / 2).value, max=(ref_ctx.h + ref_ctx.Δh / 2).value, step=0.01, description='Hour angle:')
     l_slider = widgets.FloatSlider(value=ref_ctx.interferometer.l.to(u.deg).value, min=-90, max=90, step=0.01, description='Latitude:')
     δ_slider = widgets.FloatSlider(value=ref_ctx.target.δ.to(u.deg).value, min=-90, max=90, step=0.01, description='Declination:')
@@ -64,7 +67,7 @@ Returns
         ctx.interferometer.l = l_slider.value * u.deg
         ctx.target.δ = δ_slider.value * u.deg
         ctx.h = h_slider.value * u.hourangle
-        ctx.plot_transmission_maps(N=N, return_plot=False)
+        ctx.plot_transmission_maps(N=N, return_plot=False, save_as=save_as)
 
     def reset_values(*args):
         """"reset_values.

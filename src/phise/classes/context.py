@@ -9,6 +9,9 @@ from . import telescope
 from .camera import Camera
 try:
     import matplotlib.pyplot as plt
+    from phise.modules import utils
+except ImportError:
+    pass
     try:
         plt.rcParams['image.origin'] = 'lower'
     except Exception:
@@ -277,6 +280,7 @@ class Context:
             self,
             N:int = 11,
             return_image = False,
+            save_as:str = None,
         ):
         """Plot telescope positions over time.
 
@@ -284,6 +288,7 @@ class Context:
             N (int): Number of positions to plot.
             return_image (bool): If ``True``, return an image buffer instead of
                 displaying it.
+            save_as (str): Path to save the plot.
 
         Returns:
             Optional[bytes]: PNG image buffer when ``return_image=True``; otherwise ``None``.
@@ -376,7 +381,7 @@ class Context:
 
     # Plot transmission maps --------------------------------------------------
 
-    def plot_transmission_maps(self, N:int, return_plot:bool = False, grad=False, auto_save_dir=None) -> None:
+    def plot_transmission_maps(self, N:int, return_plot:bool = False, grad=False, save_as=None) -> None:
         
         # Get transmission maps
         if grad:
@@ -451,11 +456,8 @@ class Context:
             transmissions += ",   ".join([f"{self.interferometer.chip._processed_output_labels[o]}: {processed_outs[o]*100:.2f}%" for o in range(nb_processed_outs)])
 
         # Auto-save logic
-        if auto_save_dir:
-            from pathlib import Path
-            output_dir = Path(auto_save_dir)
-            output_dir.mkdir(parents=True, exist_ok=True)
-            plt.savefig(output_dir / "transmission_maps.png", dpi=300, bbox_inches='tight')
+        if save_as:
+            utils.save_plot(save_as, "transmission_maps.png")
         
         if return_plot:
             plot = BytesIO()
@@ -465,13 +467,13 @@ class Context:
         plt.show()
         print(transmissions)
 
-    def plot_analytical_transmission_maps(self, N:int, return_plot:bool = False, auto_save_dir=None) -> None:
+    def plot_analytical_transmission_maps(self, N:int, return_plot:bool = False, save_as=None) -> None:
         """Plot the analytical transmission maps (Bright + 6 Darks + 3 Kernels).
 
         Args:
             N (int): Map resolution.
             return_plot (bool): If True, return the plot as bytes instead of showing it.
-            auto_save_dir (str or Path): Directory to automatically save figures.
+            save_as (str): Path to save the plot.
         """
         
         # Get analytical maps
@@ -560,12 +562,8 @@ class Context:
             k_str = ", ".join([f"K{i+1}: {val*100:.2f}%" for i, val in enumerate(k)])
             transmissions += k_str + linebreak
 
-        # Auto-save logic
-        if auto_save_dir:
-            from pathlib import Path
-            output_dir = Path(auto_save_dir)
-            output_dir.mkdir(parents=True, exist_ok=True)
-            plt.savefig(output_dir / "analytical_transmission_maps.png", dpi=300, bbox_inches='tight')
+        if save_as:
+            utils.save_plot(save_as, "analytical_transmission_maps.png")
 
         if return_plot:
             plot = BytesIO()
@@ -606,7 +604,7 @@ class Context:
         """Get the hour-angle range of the observation.
 
         Returns:
-            np.ndarray[float]: Hour angle values (radians).
+            np.ndarray[float]: Hour angle values.
         """
         
         nb_obs_per_night = int(self.Δh.to(u.hourangle).value // self.interferometer.camera.e.to(u.hour).value)
@@ -740,6 +738,7 @@ class Context:
             verbose: bool = False,
             plot:bool = False,
             figsize:tuple = (10, 10),
+            save_as = None,
         ) -> dict:
         """Optimize phase shifter offsets to maximize nulling performance.
 
@@ -748,6 +747,7 @@ class Context:
             verbose (bool): If ``True``, print optimization progress.
             plot (bool): If ``True``, plot the optimization process.
             figsize (tuple): Figure size for plots.
+            save_as (str): Path to save the plot if plot is True.
 
         Returns:
             dict: Dictionary with optimization history (depth, shifters).
@@ -853,6 +853,8 @@ class Context:
             axs[1].set_title("Convergence of the phase shifters")
             # axs[1].legend(loc='upper right')
 
+            if save_as:
+                utils.save_plot(save_as, "genetic_calibration.png")
             plt.show()
 
         return {
@@ -867,6 +869,7 @@ class Context:
             n: int = 1_000,
             plot: bool = False,
             figsize:tuple[int] = (30,20),
+            save_as = None,
         ):
         """Optimize calibration via least squares sampling.
 
@@ -874,6 +877,7 @@ class Context:
             n (int): Number of sampling points for least squares.
             plot (bool): If ``True``, plot the optimization process.
             figsize (tuple[int]): Figure size for plots.
+            save_as (str): Path to save the plot if plot is True.
 
         Returns:
             None | Context: New context with optimized kernel nuller (if implemented to return).
@@ -924,7 +928,7 @@ class Context:
                 chip.φ[p-1] = (np.mod(popt[0]+λ.value/4, λ.value) * λ.unit).to(chip.φ.unit)
 
             if plot:
-                axs[plt_coords].set_title(f"$|B(\phi{p})|$")
+                axs[plt_coords].set_title(rf"$|B(\phi{p})|$")
                 axs[plt_coords].scatter(x, y, label='Data', color='tab:blue')
                 axs[plt_coords].plot(x, sin(x, *popt), label='Fit', color='tab:orange')
                 axs[plt_coords].axvline(x=np.mod(popt[0]+λ.value/4, λ.value), color='k', linestyle='--', label='Optimal phase shift')
@@ -952,7 +956,7 @@ class Context:
             chip.φ[p-1] = (np.mod(popt[0], λ.value) * λ.unit).to(chip.φ.unit)
 
             if plot:
-                axs[plt_coords].set_title(f"$K_{m}(\phi{p})$")
+                axs[plt_coords].set_title(rf"$K_{m}(\phi{p})$")
                 axs[plt_coords].scatter(x, y, label='Data', color='tab:blue')
                 axs[plt_coords].plot(x, sin(x, *popt), label='Fit', color='tab:orange')
                 axs[plt_coords].axvline(x=np.mod(popt[0], λ.value), color='k', linestyle='--', label='Optimal phase shift')
@@ -987,7 +991,7 @@ class Context:
 
             # Plotting
             if plot:
-                axs[plt_coords].set_title(f"$|D_{ds[0]}(\phi{p})| + |D_{ds[1]}(\phi{p})|$")
+                axs[plt_coords].set_title(rf"$|D_{ds[0]}(\phi{p})| + |D_{ds[1]}(\phi{p})|$")
                 axs[plt_coords].scatter(x, y, label='Data', color='tab:blue')
                 axs[plt_coords].plot(x, sin(x, *popt), label='Fit', color='tab:orange')
                 axs[plt_coords].axvline(x=np.mod(popt[0]+λ.value/4, λ.value), color='k', linestyle='--', label='Optimal phase shift')
@@ -1031,6 +1035,9 @@ class Context:
         if plot:
             axs[1,1].axis('off')
             axs[1,2].axis('off')
+            
+            if save_as:
+                utils.save_plot(save_as, "obstruction_calibration.png")
             plt.show()
 
     #==============================================================================

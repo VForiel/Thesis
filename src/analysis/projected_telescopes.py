@@ -12,7 +12,9 @@ from copy import deepcopy as copy
 from phise import Telescope
 from phise import Context
 
-def gui(ctx: Context=None, n=10) -> None:
+from phise.modules import utils
+
+def gui(ctx: Context=None, n=10, save_as=None) -> None:
     """
     GUI to visualize the projected positions of the telescopes in the array.
 
@@ -23,14 +25,20 @@ def gui(ctx: Context=None, n=10) -> None:
         If None, a default context is used.
     n: int
         Number of telescopes in the interferometer. Default is 10.
+    save_as: str
+        Path to save the initial plot.
     """
     if ctx is None:
         ref_ctx = Context.get_VLTI()
     else:
         ref_ctx = copy(ctx)
+
+
+        
     l_slider = widgets.FloatSlider(value=ref_ctx.interferometer.l.to(u.deg).value, min=-90, max=90, step=0.01, description='Latitude (deg):')
     δ_slider = widgets.FloatSlider(value=ref_ctx.target.δ.to(u.deg).value, min=-90, max=90, step=0.01, description='Declination (deg):')
     reset = widgets.Button(description='Reset to default')
+    export = widgets.Button(description='Export')
     plot = widgets.Image(width=500, height=500)
 
     def update_plot(*_):
@@ -43,9 +51,16 @@ def gui(ctx: Context=None, n=10) -> None:
         l_slider.value = ref_ctx.interferometer.l.to(u.deg).value
         δ_slider.value = ref_ctx.target.δ.to(u.deg).value
     
+    def export_plot(*_):
+        ctx = copy(ref_ctx)
+        ctx.interferometer.l = l_slider.value * u.deg
+        ctx.target.δ = δ_slider.value * u.deg
+        ctx.plot_projected_positions(N=n, save_as=save_as)
+
     reset.on_click(reset_values)
+    export.on_click(export_plot)
     l_slider.observe(update_plot, 'value')
     δ_slider.observe(update_plot, 'value')
-    display(widgets.VBox([l_slider, δ_slider, reset, plot]))
+    display(widgets.VBox([l_slider, δ_slider, widgets.HBox([reset, export]), plot]))
     update_plot()
     return

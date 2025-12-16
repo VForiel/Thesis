@@ -12,9 +12,9 @@ except Exception:
 from copy import deepcopy as copy
 from astropy import units as u
 from phise.classes import Context
-from phise.modules import coordinates
+from phise.modules import coordinates, utils
 
-def plot(ctx: Context=None, resolution: int=100, n=100, map=np.median):
+def plot(ctx: Context=None, resolution: int=100, n=100, map=np.median, save_as=None):
     """
     Plot the contribution zones of the kernels in the sky.
 
@@ -26,6 +26,8 @@ def plot(ctx: Context=None, resolution: int=100, n=100, map=np.median):
         The resolution of the plot. Default is 100.
     map : function, optional
         The function to use for mapping the images. Default is np.median.
+    save_as : str, optional
+        Path to save the plot.
     """
     if ctx is None:
         ref_ctx = Context.get_VLTI()
@@ -71,4 +73,7 @@ def plot(ctx: Context=None, resolution: int=100, n=100, map=np.median):
     for companion in ref_ctx.target.companions:
         (planet_x, planet_y) = coordinates.ρθ_to_xy(ρ=companion.ρ, θ=companion.θ, fov=fov)
         axs[3].scatter(planet_x * fov / 2, planet_y * fov / 2, color='tab:blue', edgecolors='black')
+    if save_as:
+        utils.save_plot(save_as, "sky_contribution.png")
+
     plt.show()
