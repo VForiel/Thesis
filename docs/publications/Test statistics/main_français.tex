@@ -1,0 +1,303 @@
+\documentclass{article}
+
+% Language setting
+% Use French language/hyphenation
+\usepackage[french]{babel}
+% Font encoding and input encoding for proper accented characters
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+
+% Custom packages
+\usepackage{color,soul} % For highlighting text
+% Allow fragile commands like \cite and \ref inside \hl by registering them with soul
+\soulregister\cite7
+\soulregister\ref1
+\usepackage{float} % For controlling figure placement ([H] option)
+\usepackage{amsmath}
+\usepackage{amssymb} % For mathematical symbols such as \lessgtr
+\DeclareMathOperator*{\argmax}{arg\,max}
+\DeclareMathOperator*{\argmin}{arg\,min}
+
+% Set page size and margins
+% Replace `letterpaper' with `a4paper' for UK/EU standard size
+\usepackage[letterpaper,top=2cm,bottom=2cm,left=3cm,right=3cm,marginparwidth=1.75cm]{geometry}
+
+% Useful packages
+\usepackage{graphicx}
+% Graphics path: publications are in docs/publications/..., images live in docs/img/
+% Add both local `img/` and project-level `../../img/` so \includegraphics{img/...}
+% works whether the file is compiled from the publications folder or project root.
+\graphicspath{{img/}{../../img/}}
+\usepackage[colorlinks=true, allcolors=blue]{hyperref}
+% Prevent math/commands in section/bookmark strings from producing warnings
+\pdfstringdefDisableCommands{%
+    \def\Hnull{H\_0}%
+    \def\Hone{H\_1}%
+    \def\mi{\ensuremath{\mathrm{i}}}%
+    % Remove math shifts in PDF strings to avoid warnings
+    \def\${}%
+}
+% Improve line breaking to reduce overfull boxes
+% Use scalable fonts so microtype font expansion works
+\usepackage{lmodern}
+\usepackage{microtype}
+
+\definecolor{mulberry}{rgb}{0.77, 0.29, 0.55}
+\newcommand{\dm}[1]{{\color{mulberry} #1}}
+
+\newcommand{\mi}{\mathrm{i}}
+\newcommand{\Hnull}{\mathcal{H}_0}
+\newcommand{\Hone}{\mathcal{H}_1}
+
+
+\title{Analyse statistique des distributions de sortie du Kernel-Nulling pour la détection à haut contraste d'exoplanètes dans les configurations VLTI et LIFE}
+
+\author{Vincent Foriel,
+        David Mary,
+        Frantz Martinache
+       }
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+    L'interférométrie à annulation par noyau (Kernel-Nulling) \cite{Martinache2018,Laugier2021,Chingaipe2024} représente une approche prometteuse pour la détection directe d'exoplanètes. Cette technique produit des observables auto-calibrés qui, dans le cas d'une étoile seule dans l'axe de visée (hypothèse $\Hnull$), suivent une distribution symétrique et étroite centrée en zéro. Cette propriété constitue un avantage majeur pour l'analyse statistique robuste, facilitant la détection de toute déviation induite par la présence d'un compagnon planétaire. Nous utilisons des simulations Monte Carlo pour générer les distributions de sortie du Kernel-Nulling dans trois configurations distinctes : étoile seule, compagnon seul, et système étoile-planète. L'étude de ces trois distributions nous permet d'établir des modèles statistiques spécifiques aux deux hypothèses de détection : $\Hnull$ (étoile seule) et $\Hone$ (système étoile-planète). Ces modèles nous permettent de développer des tests statistiques ciblés et d'analyser leurs performances théoriques. Nous comparons plusieurs statistiques de test pour discriminer efficacement entre les deux hypothèses, puis évaluons leurs performances sur des simulations numériques de configurations instrumentales représentatives (interférométrie au sol et dans l'espace). Cette analyse statistique, actuellement appliquée à des données simulées, permet d'évaluer les performances qu'on pourrait espérer obtenir lors du déploiement d'un tel système sur un observatoire réel, ouvrant ainsi la voie à une détection robuste d'exoplanètes à haut contraste utilisant l'interférométrie à annulation par noyau.
+\end{abstract}
+
+%==============================================================================
+\section{Introduction}
+%==============================================================================
+
+La détection directe d'exoplanètes constitue l'un des défis majeurs de l'astronomie moderne, confronté à deux obstacles fondamentaux. Premièrement, la séparation angulaire entre une planète et son étoile est extrêmement faible : de quelques dizaines à quelques centaines de millisecondes d'arc pour les systèmes les plus proches. Deuxièmement, le contraste lumineux planète-étoile est extrêmement élevé, allant de $10^{-6}$ à $10^{-7}$ dans l'infrarouge thermique jusqu'à $10^{-10}$ dans le visible. Ces deux contraintes combinées rendent l'observation directe particulièrement ardue.
+
+L'interférométrie à annulation (nulling interferometry) offre une solution élégante à ces deux problèmes en exploitant les interférences destructives pour supprimer la lumière stellaire tout en préservant celle du compagnon planétaire \cite{Bracewell1979}. Cette technique repose sur la combinaison cohérente de la lumière collectée par plusieurs télescopes de façon à créer une frange sombre (null) dans la direction de l'étoile. Le principe a été démontré avec succès dans plusieurs expériences au sol \cite{Angel1997,Hanot2011}, y compris récemment avec des composants photoniques intégrés \cite{Norris2020}.
+
+Cependant, les techniques de nulling classiques souffrent de deux limitations majeures. Premièrement, elles sont extrêmement sensibles aux erreurs instrumentales (différences de chemins optiques, fluctuations de phase, variations d'amplitude). Deuxièmement, l'observable directe (la profondeur de null) est difficile à calibrer de manière absolue, car elle dépend de nombreux paramètres instrumentaux susceptibles de varier au cours de l'observation.
+
+Le Kernel-Nulling \cite{Martinache2018} représente une avancée conceptuelle importante qui permet de s'affranchir de ces limitations. Inspiré par les techniques de kernel-phase développées pour l'imagerie à haute résolution angulaire, le Kernel-Nulling construit des observables linéairement indépendantes qui sont insensibles aux erreurs de phase du premier ordre affectant individuellement les entrées du combineur interférométrique. Ces quantités, appelées kernels, sont auto-calibrées et conservent néanmoins toute l'information astrophysique contenue dans les franges nullées \cite{Laugier2020,Laugier2021}.
+
+L'objectif de cette étude est de démontrer le potentiel théorique d'un système de détection basé sur le Kernel-Nulling, en se focalisant sur l'analyse statistique des observables produits.
+
+%==============================================================================
+\section{Propriétés statistiques des signaux}
+\label{sec:properties}
+%==============================================================================
+
+Une propriété fondamentale du Kernel-Nulling, particulièrement intéressante pour la détection statistique, est que les kernels présentent une distribution de sortie caractéristique.
+
+\subsection{Modèle sous Hypothèse Nulle}
+
+En l'absence de compagnon (hypothèse $\Hnull$), les sorties de Kernel-Nulling sont dominées par le bruit résiduel. Au sol, ce bruit provient principalement des erreurs de piston induites par la turbulence atmosphérique non corrigée par l'optique adaptative. Dans l'espace, il provient essentiellement des défauts de l'instrument lui-même.
+
+La distribution résultante est observée comme étant symétrique et centrée en zéro.
+Cette propriété découle directement du principe de construction des Kernels, qui reposent sur la différence entre deux sorties annulées présentant des réponses symétriques aux perturbations \cite{Martinache2018}. Cependant, elle présente souvent des queues lourdes ("heavy tails") par rapport à une distribution gaussienne. Cette observation suggère que les méthodes basées sur la minimisation des moindres carrés (optimale pour des gaussiennes) seront sous-optimales, et motive la recherche de statistiques plus robustes.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.5\linewidth]{img/kernels_so_monochromatic_ground.png}
+    \caption{Distribution des sorties de Kernel-Nulling sous l'hypothèse $\Hnull$ (étoile seule).}
+    \label{fig:kernels_star_only}
+\end{figure}
+
+\subsection{Modèle sous Hypothèse Alternative}
+
+La présence d'un compagnon planétaire (hypothèse $\Hone$) modifie la distribution des kernels de manière spécifique. Comme illustré en Figure \ref{fig:kernels}, cette modification se manifeste principalement par :
+\begin{enumerate}
+    \item Un \textbf{décalage de la moyenne} (shift) de la distribution, du à la fuite cohérente de la lumière de la planète dans les sorties kernels.
+    \item Un potentiel \textbf{changement de forme}, notamment un aplatissement (flattening) de la distribution, une asymétrie ou même une légère bimodalité.
+\end{enumerate}
+
+\begin{figure}[H]
+    \centering
+    \begin{minipage}{0.48\linewidth}
+        \centering
+        \includegraphics[width=\linewidth]{img/kernels_po_monochromatic_ground.png}
+        \caption{Distributions des sorties de Kernel-Nulling en présence d'une planète seule.}
+        \label{fig:kernels_planet_only}
+    \end{minipage}
+    \hfill
+    \begin{minipage}{0.48\linewidth}
+        \centering
+        \includegraphics[width=\linewidth]{img/kernels_sp_monochromatic_ground.png}
+        \caption{Distributions des sorties de Kernel-Nulling sous l'hypothèse $\Hone$, zoomé de sorte à visualiser le décallage et la déformation de la distribution.}
+        \label{fig:kernels}
+    \end{minipage}
+\end{figure}
+
+Récemment, Dannert et al. \cite{Dannert2025} ont proposé un modèle analytique pour $\Hnull$, mais la forme exacte sous $\Hone$ reste complexe à modéliser analytiquement sans approximations fortes. C'est pourquoi nous privilégions ici des approches empiriques ou basées sur le modèle direct de l'instrument.
+
+%==============================================================================
+\section{Méthodologie de détection}
+\label{sec:tests}
+%==============================================================================
+
+Pour détecter efficacement la présence d'un compagnon, nous avons évalué plusieurs tests statistiques, que nous classons ici en deux familles : les tests scalaires basés sur les moments de la distribution, et les tests exploitant le modèle direct complet.
+
+\subsection{Tests scalaires (Moments et Distribution)}
+
+Ces tests visent à détecter une déviation globale de la distribution des observables $x$ par rapport à l'attendu sous $\Hnull$ (centré en 0).
+
+\subsubsection{Moyenne}
+Le test le plus naturel consiste à comparer la moyenne absolue à un seuil :
+$$
+    D_{M} = \left|\frac{1}{N}\sum_{i=1}^N x_i \right| \stackrel{\Hone}{\underset{\Hnull}{\gtrless}} \xi
+$$
+En pratique, ce test s'avère peu fiable en présence de distributions à queues lourdes (communes en interférométrie sol), car la moyenne est très sensible aux valeurs aberrantes (outliers).
+
+\subsubsection{Médiane}
+La médiane est intrinsèquement plus robuste aux valeurs extrêmes.
+$$
+    D_m = \text{median}(|x|) \stackrel{\Hone}{\underset{\Hnull}{\gtrless}} \xi
+$$
+Nos simulations montrent que la médiane surpasse souvent la moyenne, capturant le décalage global tout en ignorant les fluctuations extrêmes non-informatives. Cependant, elle nécessite un nombre d'échantillons suffisant pour être estimée avec précision.
+
+\subsubsection{Médiane des Valeurs Absolues (MAV)}
+Cette statistique combine la robustesse de la médiane et la sensibilité au décalage :
+$$
+    D_{MAV} = \text{median}(|x_i|) \stackrel{\Hone}{\underset{\Hnull}{\gtrless}} \xi
+$$
+C'est l'une des statistiques les plus performantes sur nos simulations, bénéficiant à la fois de la signature du signal (décalage) et de la réjection des outliers.
+
+\subsubsection{Flattening}
+Nous avons défini une statistique "flattening" mesurant la dispersion absolue autour de la médiane pour détecter l'aplatissement de la distribution :
+$$
+    D_f = \frac 1 N \sum_{i=1}^N |x_i - \tilde{x}| \stackrel{\Hone}{\underset{\Hnull}{\gtrless}} \xi
+$$
+\hl{[Note: Vérifier l'efficacité de ce test sur banc optique "sur un bouton" comme suggéré]}. Ce test met en évidence que la forme de la distribution contient de l'information, même si le décalage (shift) reste l'effet dominant.
+
+\subsubsection{Kolmogorov-Smirnov (KS)}
+Le test KS compare la fonction de distribution cumulative (CDF) empirique à une référence :
+$$
+    D_{KS} = \sup_x |F_{obs}(x) - F_{ref}(x)| \stackrel{\Hone}{\underset{\Hnull}{\gtrless}} \xi
+$$
+Ce test non-paramétrique est sensible à \textit{toute} déformation (décalage, forme).
+
+%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+\subsection{Approche par modèle direct : Generalized Likelihood Ratio (GLR)}
+
+Les tests scalaires ci-dessus (Moyenne, Médiane...) traitent les observables comme une simple série statistique, sans exploiter explicitement notre connaissance de la physique de l'instrument.
+Or, nous disposons d'un modèle direct $M(\theta)$ reliant la position et le contraste d'une planète $\theta$ aux observables Kernel attendues.
+
+Le Rapport de Vraisemblance Généralisé (GLR) exploite cette connaissance pour construire un test optimal. L'idée est de comparer la vraisemblance des données sous $\Hnull$ (bruit seul) à la meilleure vraisemblance possible sous $\Hone$ (bruit + planète), en maximisant sur les paramètres inconnus de la planète $\theta$.
+
+\begin{equation}
+    \Lambda_{GLR}(x) = \frac{\sup_{\theta} p(x | \theta, \Hone)}{p(x | \Hnull)}
+\end{equation}
+
+Si l'on suppose que le bruit résiduel suit une loi connue (par exemple gaussienne ou approximée empiriquement), on peut calculer explicitement $p(x | \theta, \Hone)$. Le GLR cherche alors la position $\theta$ du compagnon qui "explique le mieux" les données observées.
+
+\hl{[Vérifier formule exacte GLR à partir des notes de tableau]}.
+
+Cette méthode offre deux avantages majeurs :
+1. Elle est théoriquement optimale pour la détection si le modèle de bruit est correct.
+2. Elle fournit simultanément une estimation des paramètres de la planète (caractérisation).
+
+%==============================================================================
+\section{Généralisation}
+\label{sec:generalisation}
+%==============================================================================
+
+Jusqu'ici, nous avons considéré un kernel unique pour simplifier l'analyse. En réalité, un instrument comme le VLTI ou LIFE produit plusieurs sorties kernels simultanées, et l'observation se fait sur plusieurs poses (rotation de la ligne de base projetée).
+
+\subsection{Combinaison de plusieurs Kernels}
+Les instruments réels génèrent un vecteur de kernels $\mathbf{k} = [k_1, k_2, ...]$. Ces kernels peuvent être corrélés.
+Pour généraliser les tests :
+\begin{itemize}
+    \item \textbf{Tests scalaires} : On peut combiner les statistiques individuelles (ex : somme des carrés des médianes).
+    \item \textbf{GLR} : La généralisation est immédiate. La vraisemblance est calculée sur le vecteur de données complet, en tenant compte de la matrice de covariance du bruit $\Sigma$ :
+          $$ \log p(\mathbf{x} | \theta) \propto -(\mathbf{x} - M(\theta))^T \Sigma^{-1} (\mathbf{x} - M(\theta)) $$
+\end{itemize}
+
+\subsection{Combinaison temporelle (Multi-pose)}
+La rotation de la Terre (ou de l'interféromètre dans l'espace) fait tourner la ligne de base projetée, ce qui module le signal de la planète de manière déterministe, tandis que le bruit instrumental/atmosphérique tend à être stationnaire ou décorrélé temporellement.
+
+C'est ici que la puissance du GLR se révèle pleinement. Alors qu'un test scalaire (ex: moyenne globale sur le temps) pourrait effacer la modulation du signal (moyenne nulle si le signal oscille), le GLR utilise le modèle direct qui \textit{prédit} cette modulation. Il cherche la corrélation entre les données temporelles et le motif de modulation attendu pour une planète à la position $\theta$. Cela améliore considérablement la sensibilité de détection et réduit les fausses alarmes dues au bruit non corrélé.
+
+%==============================================================================
+\section{Scénarios instrumentaux}
+\label{sec:scenarios}
+%==============================================================================
+
+Nous évaluons ces méthodes sur trois scénarios simulés :
+\begin{enumerate}
+    \item \textbf{VLTI au sol} \cite{Chingaipe2023} : Régime dominé par la turbulence atmosphérique résiduelle et le bruit de piston. Distributions à queues lourdes attendues.
+    \item \textbf{LIFE (Espace)} \cite{Hansen2022} : Régime stable, limité par le bruit photonique et de détecteur. Distributions plus proches de la gaussienne.
+    \item \textbf{VLTI-Space} : Scénario de contrôle pour isoler l'impact atmosphérique.
+\end{enumerate}
+
+Le simulateur PHISE est utilisé pour générer des séries temporelles réalistes de kernels, incluant les effets de la turbulence (pour le cas sol), le bruit de photons, et les réponses spectrales des composants.
+
+%==============================================================================
+\section{Résultats}
+\label{sec:resultats}
+%==============================================================================
+
+\subsection{Comparaison des performances (Courbes ROC)}
+
+Les courbes ROC (Receiver Operating Characteristic) de la Figure \ref{fig:roc} illustrent la capacité de chaque test à discriminer $\Hone$ de $\Hnull$.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=7cm]{img/roc_curves.png}
+    \caption{Courbes ROC pour différentes statistiques de test sur les distribution simulées dans le contexte du VLTI.}
+    \label{fig:roc}
+\end{figure}
+
+On observe une hiérarchie claire :
+\begin{itemize}
+    \item Le \textbf{GLR} et la \textbf{MAV} offrent les meilleures performances globales.
+    \item La \textbf{Médiane} est très robuste mais nécessite plus de signal pour égaler le GLR.
+    \item La \textbf{Moyenne} est significativement moins performante dans le cas "Sol" (VLTI) à cause des queues de distribution, confirmant notre analyse théorique.
+\end{itemize}
+
+\subsection{Analyse des P-values}
+La Figure \ref{fig:pvalues} montre l'évolution des P-values. On confirme que les tests robustes (Médiane, MAV) permettent d'atteindre des niveaux de confiance élevés plus rapidement que les tests basés sur la moyenne en présence de bruit impulsif.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=10cm]{img/p-values.png}
+    \caption{Évolution des valeurs P en fonction du seuil pour différentes statistiques de test.}
+    \label{fig:pvalues}
+\end{figure}
+
+%==============================================================================
+\section{Conclusion}
+\label{sec:conclusion}
+%==============================================================================
+
+Cette étude permet de dresser un bilan des méthodes statistiques pour la détection par Kernel-Nulling :
+
+\begin{itemize}
+    \item \textbf{Moyenne} :
+          \begin{itemize}
+              \item[+] Simple à calculer.
+              \item[-] \textbf{À éviter} en régime atmosphérique (Sol) car trop sensible aux queues de distribution et outliers.
+          \end{itemize}
+
+    \item \textbf{Médiane / MAV} :
+          \begin{itemize}
+              \item[+] \textbf{Excellente robustesse} face aux données bruitées. C'est le "couteau suisse" recommandé pour une première analyse rapide ("Quick Look") sans a priori sur le modèle.
+              \item[-] Nécessite un nombre d'échantillons suffisant. Ne permet pas directement de localiser la planète (juste détection).
+          \end{itemize}
+
+    \item \textbf{Kolmogorov-Smirnov} :
+          \begin{itemize}
+              \item[+] Capture toute déformation du signal.
+              \item[-] Moins puissant que les tests ciblés pour un simple décalage.
+          \end{itemize}
+
+    \item \textbf{GLR (Generalized Likelihood Ratio)} :
+          \begin{itemize}
+              \item[+] \textbf{La méthode de référence} pour l'analyse finale. Elle intègre toute la physique (modulation, multi-kernels) et permet l'estimation des paramètres de la planète.
+              \item[-] Coût de calcul plus élevé (optimisation sur grille). Dépend de la qualité du modèle direct et de la connaissance de la covariance du bruit.
+          \end{itemize}
+\end{itemize}
+
+En résumé : nous recommandons l'usage de la \textbf{MAV} pour le monitoring temps-réel et la sélection de frames, et l'usage du \textbf{GLR} pour la détection finale et la caractérisation astrophysique.
+
+\bibliographystyle{alpha}
+\bibliography{sample}
+
+\end{document}
