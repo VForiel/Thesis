@@ -80,7 +80,7 @@ def compute_analytical_distrib(n, ctx, opd_errors, α, β, φ1, φ2, φ3, φ4):
 # Instantaneous distribution
 #==============================================================================
 
-def instant_distribution(ctx: Context=None, n=10000, stat=np.median, figsize=(10, 10), compare=True, r=1, log=False, density = False, 
+def instant_distribution(ctx: Context=None, n=10000, stat=np.median, figsize=(10, 10), compare=True, log=False, density = False, 
     sync_plots = True, save_path=None, show=True, save_as=None) -> np.ndarray:
     """
     Get the instantaneous distribution of the kernel nuller.
@@ -200,19 +200,19 @@ def instant_distribution(ctx: Context=None, n=10000, stat=np.median, figsize=(10
     b_comb, d_comb, k_comb = compute_analytical_distrib(n, ctx, opd_errors, α, β, φ1, φ2, φ3, φ4)
     analytical_brights = b_comb
     analytical_darks = d_comb
-    analytical_data = k_comb * r
+    analytical_data = k_comb
     
     # Star only
     b_so, d_so, k_so = compute_analytical_distrib(n, ctx_so, opd_errors, α_so, β_so, φ1, φ2, φ3, φ4)
     analytical_brights_so = b_so
     analytical_darks_so = d_so
-    analytical_data_so = k_so * r
+    analytical_data_so = k_so
     
     # Planet only
     b_po, d_po, k_po = compute_analytical_distrib(n, ctx_po, opd_errors, α_po, β_po, φ1, φ2, φ3, φ4)
     analytical_brights_po = b_po
     analytical_darks_po = d_po
-    analytical_data_po = k_po * r
+    analytical_data_po = k_po
 
     # Sum of distributions -----------------------------------------
 
@@ -239,7 +239,7 @@ def instant_distribution(ctx: Context=None, n=10000, stat=np.median, figsize=(10
         lim = 0
         for k in range(3):
 
-            keep = 75
+            keep = 50
             percentil = (100 - keep) / 2
 
             # Get x limits
@@ -280,29 +280,29 @@ def instant_distribution(ctx: Context=None, n=10000, stat=np.median, figsize=(10
         for k in range(3):
             for j in range(3):
                 if j in [1,2]:
-                    axs[k, j].hist(analytical_data[:,k], label='Analytic', bins=bins, alpha=0.5, color='green', density=density, log=log)
-                    axs[k, j].axvline(stat(analytical_data[:,k]), color='green', linestyle='--')
-                    if i==2:
-                        axs[k, j].hist(analytical_comb[:,k], label='Analytic (sum)', bins=bins, alpha=0.5, color='red', density=density, histtype='step', linewidth=2, log=log)
-                        axs[k, j].axvline(stat(analytical_comb[:,k]), color='red', linestyle='--')
-                        Δbins = bins[1]-bins[0]
-                        edges = bins - Δbins/2
-                        edges = np.append(edges, edges[-1] + Δbins)
-                        axs[k, j].stairs(analytical_conv[:,k], edges=edges, label='Analytic (conv)', alpha=0.5, color='purple', edgecolor='purple', fill=False, linewidth=2)
+                    axs[k, j].hist(analytical_data[:,k], label=r'$\mathcal{A}(s+p)$', bins=bins, alpha=0.5, color='green', density=density, log=log)
+                    axs[k, j].axvline(stat(analytical_data[:,k]), color='green', linestyle='--', alpha=0.5)
+                    # if i==2:
+                    #     axs[k, j].hist(analytical_comb[:,k], label=r'$\mathcal{A}(s) + \mathcal{A}(p)$', bins=bins, alpha=0.5, color='red', density=density, histtype='step', linewidth=2, log=log)
+                    #     axs[k, j].axvline(stat(analytical_comb[:,k]), color='red', linestyle='--')
+                    #     Δbins = bins[1]-bins[0]
+                    #     edges = bins - Δbins/2
+                    #     edges = np.append(edges, edges[-1] + Δbins)
+                    #     axs[k, j].stairs(analytical_conv[:,k], edges=edges, label=r'$\mathcal{D}(\mathcal{A}(s)) \otimes \mathcal{D}(\mathcal{A}(p))$', alpha=0.5, color='purple', edgecolor='purple', fill=False, linewidth=2)
                 if j in [0,2]:
-                    axs[k, j].hist(numerical_data[:, k], label='Numeric', bins=bins, alpha=0.5, color='blue', density=density, log=log)
-                    axs[k, j].axvline(stat(numerical_data[:,k]), color='blue', linestyle='--')
-                    if i==2:
-                        axs[k, j].hist(data_comb[:,k], label='Numeric (sum)', bins=bins, alpha=0.5, color='orange', density=density, histtype='step', linewidth=2, log=log)
-                        axs[k, j].axvline(stat(data_comb[:,k]), color='orange', linestyle='--')
-                        Δbins = bins[1]-bins[0]
-                        edges = bins - Δbins/2
-                        edges = np.append(edges, edges[-1] + Δbins)
-                        axs[k, j].stairs(data_conv[:,k], edges=edges, label='Numeric (conv)', alpha=0.5, color='sienna', edgecolor='sienna', fill=False, linewidth=2)
+                    axs[k, j].hist(numerical_data[:, k], label=r'$\mathcal{S}(s+p)$', bins=bins, alpha=0.5, color='blue', density=density, log=log)
+                    axs[k, j].axvline(stat(numerical_data[:,k]), color='blue', linestyle='--', alpha=0.5)
+                    # if i==2:
+                    #     axs[k, j].hist(data_comb[:,k], label=r'$\mathcal{S}(s) + \mathcal{S}(p)$', bins=bins, alpha=0.5, color='orange', density=density, histtype='step', linewidth=2, log=log)
+                    #     axs[k, j].axvline(stat(data_comb[:,k]), color='orange', linestyle='--')
+                    #     Δbins = bins[1]-bins[0]
+                    #     edges = bins - Δbins/2
+                    #     edges = np.append(edges, edges[-1] + Δbins)
+                    #     axs[k, j].stairs(data_conv[:,k], edges=edges, label=r'$\mathcal{D}(\mathcal{S}(s)) \otimes \mathcal{D}(\mathcal{S}(p))$', alpha=0.5, color='sienna', edgecolor='sienna', fill=False, linewidth=2)
                 # Set labels
                 axs[k,j].set_ylabel('Occurrences (%)')
                 axs[k,j].set_title(f'Kernel {k + 1}')
-                axs[k,j].legend()
+                # axs[k,j].legend()
             if sync_plots:
                 axs[k,0].set_xlim(-lim, lim)
                 axs[k,2].set_xlim(-lim, lim)
