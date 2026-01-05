@@ -1,0 +1,175 @@
+%                                                                 aa.dem
+% AA vers. 9.1, LaTeX class for Astronomy & Astrophysics
+% demonstration file
+%                                                       (c) EDP Sciences
+%-----------------------------------------------------------------------
+%
+%\documentclass[referee]{aa} % for a referee version
+%\documentclass[onecolumn]{aa} % for a paper on 1 column  
+%\documentclass[longauth]{aa} % for the long lists of affiliations 
+%\documentclass[letter]{aa} % for the letters 
+%\documentclass[bibyear]{aa} % if the references are not structured 
+%                              according to the author-year natbib style
+
+%
+\PassOptionsToPackage{french}{babel}
+\documentclass[onecolumn]{aa}  
+
+\usepackage{graphicx}
+\usepackage{caption}
+\DeclareMathOperator*{\argmax}{arg\,max}
+\DeclareMathOperator*{\argmin}{arg\,min}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\usepackage{txfonts}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%\usepackage[options]{hyperref}
+% To add links in your PDF file, use the package "hyperref"
+% with options according to your LaTeX or PDFLaTeX drivers.
+%
+
+\newcommand{\mi}{\mathrm{i}}
+
+\begin{document} 
+\selectlanguage{french}
+
+   \title{Tunable Kernel-Nulling for direct detection of exoplanets}
+
+   \subtitle{3. Suivi de Frange Actif via MMI 4x4}
+
+   \titlerunning{Suivi de Frange Actif via MMI 4x4}
+
+   \author{Vincent Foriel\inst{1},
+            Frantz Martinache\inst{1},
+            David Mary\inst{1},
+            Nick Cvetojevick\inst{1},
+            Romain Laugier\inst{2},
+            Marc-Antoine Martinod\inst{1},
+            Sylvie Robbe-Dubois\inst{1}
+            \and
+            Roxanne Ligi\inst{1}
+          }
+   \authorrunning{Foriel et al.}
+
+   \institute{Université Côte d’Azur, Observatoire de la Côte d’Azur Nice, CNRS, Laboratoire Lagrange, Nice, France
+         \and
+            KU Leuven university, Leuven, Belgium
+             }
+
+   \date{Received ---; accepted ---}
+
+    % \abstract{}{}{}{}{} 
+    % 5 {} token are mandatory
+     
+    \abstract
+    % context heading (optional)
+    {Pour maintenir l'extinction stellaire profonde nécessaire à la détection d'exoplanètes (Nulling), la différence de chemin optique entre les faisceaux collectés doit être stabilisée avec une précision nanométrique. Les systèmes de suivi de frange (Fringe Tracking) sont donc essentiels.}
+    % aims heading (mandatory)
+    {Nous proposons d'utiliser le composant de recombinaison scientifique lui-même (un MMI 4x4) comme capteur de phase pour réaliser un suivi de frange actif, sans nécessiter de voie métrologique séparée.}
+    % methods heading (mandatory)
+    {En ne sélectionnant que deux entrées actives (par obstruction des deux autres), le MMI 4x4 agit comme un coupleur statique produisant 4 sorties déphasées. Si la matrice de transfert du MMI est bien conçue (proche d'une matrice de DFT ou de Butler), ces 4 sorties échantillonnent la frange d'interférence avec des déphasages proches de $0, \pi/2, \pi, 3\pi/2$, constituant ainsi un système ABCD instantané. À partir des intensités mesurées simultanément sur les 4 sorties, nous pouvons estimer la phase instantanée entre les deux entrées et piloter les déphaseurs thermo-optiques intégrés pour corriger les dérives en temps réel.}
+    % results heading (mandatory)
+    {A COMPLETER AVEC LES RESULTATS DE SIMULATION/LABO}
+    % conclusions heading (optional), leave it empty if necessary 
+    {CONCLUSION A VENIR}
+    
+    \keywords{Fringe Tracking, Active Control, MMI, ABCD System, Interferometry, Phase Locking}
+    
+    \maketitle
+    
+    %-------------------------------------------------------------------
+    
+    \section{Introduction}
+    
+    La stabilité de phase est le talon d'Achille de l'interférométrie annulante. Une dérive de phase dégrade instantanément la profondeur de nulling. Habituellement, un suiveur de frange externe est utilisé pour verrouiller la phase (fringe tracker). Cependant, dans le cadre d'instruments intégrés et compacts, il est avantageux d'utiliser le combineur scientifique lui-même comme capteur de phase lorsque cela est possible.
+    
+    Nous explorons ici l'utilisation d'un MMI 4x4, initialement prévu pour du Kernel-Nulling à 4 télescopes, comme capteur de phase par paires (baselines) pour le cophasage.
+    
+    %--------------------------------------------------------------------
+    
+    \section{Principe du Système ABCD Intégré}
+    
+    Un interféromètre multimode (MMI) $N \times N$ mélange les $N$ champs d'entrée pour produire $N$ champs de sortie. La relation entrée-sortie est donnée par $S = M \cdot E$.
+    
+    Si nous ne considérons que deux entrées $i$ et $j$ (en obstruant ou éteignant les autres), le signal sur la sortie $k$ s'écrit :
+    \begin{equation}
+        I_k = |M_{ki} E_i + M_{kj} E_j|^2 = |M_{ki}|^2 |E_i|^2 + |M_{kj}|^2 |E_j|^2 + 2 |M_{ki} M_{kj} E_i E_j| \cos(\phi_{ij} + \psi_k)
+    \end{equation}
+    
+    Où :
+    \begin{itemize}
+        \item $\phi_{ij}$ est la différence de phase atmosphérique/instrumentale que l'on souhaite mesurer et corriger.
+        \item $\psi_k = \arg(M_{ki}) - \arg(M_{kj})$ est le déphasage instrumental introduit par le MMI sur la voie $k$.
+    \end{itemize}
+    
+    Pour un MMI 4x4 bien conçu (ou un coupleur hybride 90$^\circ$), les phases instrumentales $\psi_k$ pour les 4 sorties sont idéalement réparties tous les $\pi/2$ (par exemple $0, \pi/2, \pi, 3\pi/2$). C'est la configuration classique d'un système ABCD, où l'on dispose de 4 mesures en quadrature de la même frange.
+    
+    \begin{equation}
+        A = I_1, \quad B = I_2, \quad C = I_3, \quad D = I_4
+    \end{equation}
+
+    \begin{figure}[t!]
+       \centering
+       \includegraphics[width=\hsize]{img/abcd_principle.png}
+       \caption{Principe de la mesure de phase ABCD. Les quatre sorties du composant échantillonnent la frange d'interférence (courbe continue) à des positions fixes séparées de $\pi/2$. La mesure simultanée des intensités A, B, C et D permet de remonter à la phase inconnue $\phi$.}
+       \label{fig:abcd_principle}
+    \end{figure}
+    
+    La phase peut alors être estimée de manière robuste par des algorithmes de type :
+    \begin{equation}
+        \tan(\phi) \approx \frac{B - D}{A - C}
+    \end{equation}
+    (en supposant un mappage idéal). Dans le cas général d'un MMI réel caractérisé (voir Papier 2), nous utilisons un estimateur généralisé prenant en compte les valeurs réelles de $|M_{kn}|$ et $\psi_k$ (algorithme V2PM ou ajustement par moindres carrés).
+    
+    %-------------------------------------------------------------------
+    
+    \section{Mise en Oeuvre et Contrôle Actif}
+
+    \subsection{Configuration}
+    Pour réaliser ce suivi de frange, nous utilisons les mêmes déphaseurs thermo-optiques que ceux utilisés pour le Kernel-Nulling (Papier 2). Le processus est le suivant :
+    \begin{enumerate}
+        \item Obstruction physique ou logicielle de 2 entrées sur 4.
+        \item Acquisition rapide (fréquence > 100 Hz typiquement pour l'atmosphère, ou plus lent pour les dérives thermiques instrumentales) des 4 sorties.
+        \item Calcul de l'erreur de phase $\epsilon = \phi_{mes} - \phi_{consigne}$.
+        \item Application d'une correction via les déphaseurs thermo-optiques (boucle fermée PID).
+    \end{enumerate}
+    
+    \subsection{Séquencage}
+    Pour cophaser l'ensemble du réseau de 4 télescopes, on peut imaginer un séquencage temporel rapide où l'on alterne les paires de bases (par exemple Base 1-2, puis Base 2-3, puis Base 3-4) pour verrouiller l'ensemble des phases relatives, avant de passer en mode "Science" (4 entrées ouvertes) pendant une période de stabilité. Alternativement, ce mode peut servir à la calibration initiale et au suivi des dérives lentes en cours d'observation (si le flux le permet).
+    
+    %--------------------------------------------------------------------
+    
+    \section{Résultats Préliminaires}
+    
+    La Figure~\ref{fig:fringe_lock} présente les résultats d'une simulation numérique de la boucle de contrôle de phase. Nous avons modélisé une turbulence atmosphérique de type Kolmogorov dérivant dans le temps (courbe grise) et la réponse du système en boucle fermée (courbe bleue) activée à $t=0.5$s.
+    
+    \begin{figure}[t!]
+       \centering
+       \includegraphics[width=\hsize]{img/fringe_locking_sim.png}
+       \caption{Simulation du verrouillage de frange actif. Haut: Évolution de la phase atmosphérique (gris) et de l'erreur résiduelle en boucle fermée (bleu). Bas: Signaux d'intensité mesurés sur les 4 sorties ABCD.}
+       \label{fig:fringe_lock}
+    \end{figure}
+    
+    L'histogramme de l'erreur de phase résiduelle (Figure~\ref{fig:res_hist}) montre une dispersion RMS inférieure à $\lambda/20$ (pour un rapport signal sur bruit typique de 20), ce qui est suffisant pour maintenir un null profond.
+
+    \begin{figure}[t!]
+       \centering
+       \includegraphics[width=0.8\hsize]{img/residual_histogram.png}
+       \caption{Distribution de l'erreur de phase résiduelle en régime établi. La précision atteinte permet de valider le concept de fringe tracking intégré.}
+       \label{fig:res_hist}
+    \end{figure}
+    
+    %-----------------------------------------------------------------
+    
+    \section{Conclusion}
+    
+    Nous avons démontré que le composant MMI 4x4, au-delà de sa fonction de mélangeur pour le Kernel-Nulling, possède des propriétés intrinsèques permettant de l'utiliser comme un capteur de front d'onde (fringe tracker) intégré performant. L'exploitation des 4 sorties en configuration ABCD permet une mesure instantanée et non-ambiguë de la phase, autorisant un contrôle actif via les déphaseurs intégrés.
+    
+    \begin{acknowledgements}
+          Remerciements...
+    \end{acknowledgements}
+    
+    \bibliographystyle{aa} 
+    \nocite{*}
+    \bibliography{refs}
+
+\end{document}

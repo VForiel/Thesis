@@ -1,0 +1,170 @@
+% $ biblatex auxiliary file $
+% $ biblatex bbl format version 3.2 $
+% Do not modify the above lines!
+%
+% This is an auxiliary file used by the 'biblatex' package.
+% This file may safely be deleted. It will be recreated by
+% biber as required.
+%
+\begingroup
+\makeatletter
+\@ifundefined{ver@biblatex.sty}
+  {\@latex@error
+     {Missing 'biblatex' package}
+     {The bibliography requires the 'biblatex' package.}
+      \aftergroup\endinput}
+  {}
+\endgroup
+
+
+\refsection{0}
+  \datalist[entry]{nyt/global//global/global}
+    \entry{bracewell_detecting_1978}{article}{}
+      \name{author}{1}{}{%
+        {{un=0,uniquepart=base,hash=e6b9d34a32f6bf50b4a7085961278fd7}{%
+           family={Bracewell},
+           familyi={B\bibinitperiod},
+           given={Ronald\bibnamedelima N},
+           giveni={R\bibinitperiod\bibinitdelim N\bibinitperiod},
+           givenun=0}}%
+      }
+      \list{publisher}{1}{%
+        {Nature Publishing Group}%
+      }
+      \strng{namehash}{e6b9d34a32f6bf50b4a7085961278fd7}
+      \strng{fullhash}{e6b9d34a32f6bf50b4a7085961278fd7}
+      \strng{bibnamehash}{e6b9d34a32f6bf50b4a7085961278fd7}
+      \strng{authorbibnamehash}{e6b9d34a32f6bf50b4a7085961278fd7}
+      \strng{authornamehash}{e6b9d34a32f6bf50b4a7085961278fd7}
+      \strng{authorfullhash}{e6b9d34a32f6bf50b4a7085961278fd7}
+      \field{sortinit}{B}
+      \field{sortinithash}{d7095fff47cda75ca2589920aae98399}
+      \field{extradatescope}{labelyear}
+      \field{labeldatesource}{}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{journaltitle}{Nature}
+      \field{number}{5673}
+      \field{title}{Detecting nonsolar planets by spinning infrared interferometer}
+      \field{volume}{274}
+      \field{year}{1978}
+      \field{pages}{780\bibrangedash 781}
+      \range{pages}{2}
+    \endentry
+    \entry{martinache_kernel_2018}{article}{}
+      \name{author}{2}{}{%
+        {{un=0,uniquepart=base,hash=05bbba64649eb81ed20ad7b17f716bfa}{%
+           family={Martinache},
+           familyi={M\bibinitperiod},
+           given={Frantz},
+           giveni={F\bibinitperiod},
+           givenun=0}}%
+        {{un=0,uniquepart=base,hash=aa1d64eb25add1b7be801a37a2f2eb0d}{%
+           family={Ireland},
+           familyi={I\bibinitperiod},
+           given={Michael\bibnamedelima J},
+           giveni={M\bibinitperiod\bibinitdelim J\bibinitperiod},
+           givenun=0}}%
+      }
+      \list{publisher}{1}{%
+        {EDP Sciences}%
+      }
+      \strng{namehash}{b80e1317aaa2563b0eaed5177751ca31}
+      \strng{fullhash}{b80e1317aaa2563b0eaed5177751ca31}
+      \strng{bibnamehash}{b80e1317aaa2563b0eaed5177751ca31}
+      \strng{authorbibnamehash}{b80e1317aaa2563b0eaed5177751ca31}
+      \strng{authornamehash}{b80e1317aaa2563b0eaed5177751ca31}
+      \strng{authorfullhash}{b80e1317aaa2563b0eaed5177751ca31}
+      \field{sortinit}{M}
+      \field{sortinithash}{4625c616857f13d17ce56f7d4f97d451}
+      \field{extradatescope}{labelyear}
+      \field{labeldatesource}{}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{journaltitle}{Astronomy \& Astrophysics}
+      \field{title}{Kernel-nulling for a robust direct interferometric detection of exoplanets}
+      \field{volume}{619}
+      \field{year}{2018}
+      \field{pages}{A87}
+      \range{pages}{-1}
+    \endentry
+    \entry{mayor_jupiter-mass_1995}{article}{}
+      \name{author}{2}{}{%
+        {{un=0,uniquepart=base,hash=8624cfa740f452b03450998b722cfad5}{%
+           family={Mayor},
+           familyi={M\bibinitperiod},
+           given={Michel},
+           giveni={M\bibinitperiod},
+           givenun=0}}%
+        {{un=0,uniquepart=base,hash=f5d35eb8a124a5a563c6686d91ccc091}{%
+           family={Queloz},
+           familyi={Q\bibinitperiod},
+           given={Didier},
+           giveni={D\bibinitperiod},
+           givenun=0}}%
+      }
+      \list{publisher}{1}{%
+        {Nature Publishing Group}%
+      }
+      \strng{namehash}{5f08335e61aac4d8f04f3381534a54ce}
+      \strng{fullhash}{5f08335e61aac4d8f04f3381534a54ce}
+      \strng{bibnamehash}{5f08335e61aac4d8f04f3381534a54ce}
+      \strng{authorbibnamehash}{5f08335e61aac4d8f04f3381534a54ce}
+      \strng{authornamehash}{5f08335e61aac4d8f04f3381534a54ce}
+      \strng{authorfullhash}{5f08335e61aac4d8f04f3381534a54ce}
+      \field{sortinit}{M}
+      \field{sortinithash}{4625c616857f13d17ce56f7d4f97d451}
+      \field{extradatescope}{labelyear}
+      \field{labeldatesource}{}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{journaltitle}{Nature}
+      \field{number}{6555}
+      \field{title}{A Jupiter-mass companion to a solar-type star}
+      \field{volume}{378}
+      \field{year}{1995}
+      \field{pages}{355\bibrangedash 359}
+      \range{pages}{5}
+    \endentry
+    \entry{soldano1995optical}{article}{}
+      \name{author}{2}{}{%
+        {{un=0,uniquepart=base,hash=75e60edcc58abd2ee342454579c8d543}{%
+           family={Soldano},
+           familyi={S\bibinitperiod},
+           given={Lucas\bibnamedelima B},
+           giveni={L\bibinitperiod\bibinitdelim B\bibinitperiod},
+           givenun=0}}%
+        {{un=0,uniquepart=base,hash=81c0c086b45e8683cd2221851f647965}{%
+           family={Pennings},
+           familyi={P\bibinitperiod},
+           given={Erik\bibnamedelima CM},
+           giveni={E\bibinitperiod\bibinitdelim C\bibinitperiod},
+           givenun=0}}%
+      }
+      \list{publisher}{1}{%
+        {IEEE}%
+      }
+      \strng{namehash}{6af957a321419d57a389cbd165e3842d}
+      \strng{fullhash}{6af957a321419d57a389cbd165e3842d}
+      \strng{bibnamehash}{6af957a321419d57a389cbd165e3842d}
+      \strng{authorbibnamehash}{6af957a321419d57a389cbd165e3842d}
+      \strng{authornamehash}{6af957a321419d57a389cbd165e3842d}
+      \strng{authorfullhash}{6af957a321419d57a389cbd165e3842d}
+      \field{sortinit}{S}
+      \field{sortinithash}{b164b07b29984b41daf1e85279fbc5ab}
+      \field{extradatescope}{labelyear}
+      \field{labeldatesource}{}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{journaltitle}{Journal of lightwave technology}
+      \field{number}{4}
+      \field{title}{Optical multi-mode interference devices based on self-imaging: principles and applications}
+      \field{volume}{13}
+      \field{year}{1995}
+      \field{pages}{615\bibrangedash 627}
+      \range{pages}{13}
+    \endentry
+  \enddatalist
+\endrefsection
+\endinput
+

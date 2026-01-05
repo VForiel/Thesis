@@ -1,28 +1,43 @@
-## PHISE
+# Tunable Kernel Nulling
 
-PHISE (PHotonic Interferometry Simulation for Exoplanets) is a Python package for simulation and analysis of interferometric instruments using layered photonic chips. It provides high-level classes (telescopes, interferometer, kernel nuller, camera, target scene) and numerical modules (propagation, coordinates, MMI recombiners, test statistics) to build scenarios, simulate the instrument chain, and visualize responses (transmission maps, projected baselines, null/dark/bright outputs, etc.).
+**Author:** Vincent Foriel
+**Supervisor:** Dr. Frantz Martinache, Prof. David Mary
 
-The repository also ships demo notebooks and a complete documentation
+This repository contains the source code, simulation tools, and analysis scripts developed in the context of my PhD thesis.
+The research focuses on **Tunable Kernel Nulling** and **Photonic Interferometry** for the direct detection of exoplanets.
 
-> ⚠️ **Important note**
-> 
-> PHISE is currently under active development and is still a part of a PhD research project. The API and functionalities may be instable, not correctly documented or change at any time.
+## Project Overview
 
-## Requirements and installation
+The core of this work is the development of **PHISE** (PHotonic Interferometry Simulation for Exoplanets), a Python package designed for the simulation and analysis of interferometric instruments using layered photonic chips.
 
-- Python 3.11 or upper.
-- Main dependencies: numpy, astropy, scipy, matplotlib, numba, ipywidgets, sympy, etc. (handled automatically).
+PHISE provides:
+- High-level classes to model the complete instrument chain (`TelescopeArray`, `Interferometer`, `Chip`, `Camera`).
+- Numerical modules for signal propagation, MMI recombiners, and statistical analysis.
+- Tools for visualizing instrument responses (transmission maps, projected baselines, nulling outputs).
 
-Two installation paths:
+While the package name `phise` remains used in the codebase for import (e.g., `import phise`), this repository (`THESIS`) encompasses the broader scope of the research project, including experimental scripts, optimization logs, and thesis-specific analysis notebooks.
 
-1) Conda environment (recommended)
+> ⚠️ **Important Note**
+>
+> This code is part of an active PhD research project. APIs and functionalities are subject to change as the research evolves.
+> The package is currently in a pre-release state `v0.1.1`.
+
+## Requirements and Installation
+
+This project requires **Python 3.11+**.
+
+Dependencies (managed automatically): `numpy`, `astropy`, `scipy`, `matplotlib`, `numba`, `ipywidgets`, `sympy`, etc.
+
+### Installation
+
+**1. Conda Environment (Recommended)**
 
 ```powershell
 conda env create -f environment.yml
 conda activate phise
 ```
 
-2) pip editable install (dev mode)
+**2. Pip Editable Install (Dev Mode)**
 
 ```powershell
 pip install -e .
@@ -30,20 +45,18 @@ pip install -e .
 
 ## Documentation
 
-A complete documentation is available at https://phise.readthedocs.io/
+Full documentation for the PHISE package is available at: [https://phise.readthedocs.io/](https://phise.readthedocs.io/)
 
-## Design notes
+## Design Philosophy
 
-- Physical quantities are handled with `astropy.units` and validated in property setters to ensure unit consistency.
-- Heavy computations rely on `numpy` and `numba` where appropriate.
-- High-level methods (`Context`) automatically propagate parameter changes (e.g., recompute projected positions and photon flux).
+- **Physical Consistency**: All physical quantities use `astropy.units` and are validated to ensure consistency.
+- **Performance**: Computationally intensive tasks utilize `numpy` and `numba`.
+- **Automation**: Parameter changes in high-level contexts automatically trigger re-computations of derived values (e.g., projected baselines).
 
-## Credits
+## Citation
 
-- Lead author: Vincent Foriel.
-- If you use PHISE in scientific work, please cite the repository and/or your related publications.
+If you use this code or findings in your scientific work, please cite the related PhD thesis or publications by Vincent Foriel.
 
-## Questions, bugs, contributions
+## Contact & Contributions
 
-Issues and contributions are welcome. Feel free to propose improvements (docs, tests, examples, new utilities in `modules/`, etc.) by opening an issue or a pull request.
-
+Questions, issues, and contributions are welcome. Please open an issue or pull request for improvements.

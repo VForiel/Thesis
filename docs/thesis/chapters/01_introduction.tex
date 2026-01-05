@@ -1,0 +1,26 @@
+\chapter{Introduction}
+\label{ch:intro}
+
+\section{Context: The Quest for Other Worlds}
+The detection and characterization of exoplanets is one of the most dynamic fields in modern astronomy. Since the discovery of 51 Pegasi b \citep{mayor_jupiter-mass_1995}, thousands of exoplanets have been detected, revealing a staggering diversity of planetary systems. However, the majority of these detections rely on indirect methods such as radial velocity or transit photometry. While these techniques provide valuable information on the mass, radius, and orbital parameters of planets, they are often limited in their ability to characterize the atmosphere and composition of these distant worlds directly.
+
+High-contrast imaging, or direct imaging, aims to spatially resolve the planet from its host star. This is a formidable challenge due to the immense brightness contrast between the star and the planet (ranging from $10^{-3}$ for young giant planets to $10^{-10}$ for Earth-like planets) and the small angular separation involved (often less than a fraction of an arcsecond).
+
+\section{The High-Contrast Imaging Problem}
+The fundamental limit to direct imaging is not merely the diffraction limit of the telescope, but the presence of optical aberrations caused by the Earth's turbulent atmosphere or imperfections in the telescope optics. These aberrations create a "speckle halo" that can mimic or obscure faint planetary signals. To overcome this, specific instrumentation strategies are required.
+
+\section{Current Limitations and Challenges}
+
+\subsection{Coronagraphy}
+Coronagraphy relies on blocking the starlight using a focal plane mask or pupil apodization. It typically requires a single, continuous aperture and is extremely sensitive to low-order wavefront errors (tip-tilt). While highly effective in space (e.g., JWST) or with extreme adaptive optics (e.g., VLT/SPHERE), it faces challenges at very small inner working angles (IWA).
+
+\subsection{Classical Interferometry}
+Long-baseline interferometry (e.g., VLTI) allows for high angular resolution by combining light from multiple telescopes. However, classical visibility measurements often lack the dynamic range required for high-contrast detection due to calibration errors and phase noise limiting the precision.
+
+\subsection{Nulling Interferometry}
+First proposed by Bracewell \citep{bracewell_detecting_1978}, nulling interferometry aims to destructively interfere the starlight while constructively interfering the planet light. This requires extremely precise path length control to maintain the "null" depth. In practice, instrumental drifts and residual phase errors limit the stability and obtainable contrast of ground-based nullers.
+
+\section{A Robust Solution: Kernel Nulling}
+To address the limitations of classical nulling, the concept of **Kernel Nulling** (KN) has been proposed \citep{martinache_kernel_2018}. KN leverages the idea of phase closure (used in closure phase) but applies it to the context of nulling. By forming linear combinations of the combiner outputs that are insensitive to second-order phase errors, KN provides observables that are robust against instrumental aberrations.
+
+This thesis focuses on the development of **Tunable Kernel Nulling**, bringing the concept from theoretical formulation to experimental validation using integrated photonics. We introduce the design of reconfigurable beam combiners capable of adapting to different observing conditions and optimizing the nulling efficiency.

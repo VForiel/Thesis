@@ -1,0 +1,254 @@
+%                                                                 aa.dem
+% AA vers. 9.1, LaTeX class for Astronomy & Astrophysics
+% demonstration file
+%                                                       (c) EDP Sciences
+%-----------------------------------------------------------------------
+%
+%\documentclass[referee]{aa} % for a referee version
+%\documentclass[onecolumn]{aa} % for a paper on 1 column  
+%\documentclass[longauth]{aa} % for the long lists of affiliations 
+%\documentclass[letter]{aa} % for the letters 
+%\documentclass[bibyear]{aa} % if the references are not structured 
+%                              according to the author-year natbib style
+
+%
+\PassOptionsToPackage{french}{babel}
+\documentclass[onecolumn]{aa}  
+
+\usepackage{graphicx}
+\usepackage{caption}
+\DeclareMathOperator*{\argmax}{arg\,max}
+\DeclareMathOperator*{\argmin}{arg\,min}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\usepackage{txfonts}
+\usepackage{xcolor}
+\usepackage{soul}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%\usepackage[options]{hyperref}
+% To add links in your PDF file, use the package "hyperref"
+% with options according to your LaTeX or PDFLaTeX drivers.
+%
+
+\newcommand{\mi}{\mathrm{i}}
+
+\begin{document}
+\selectlanguage{french}
+
+\title{Calibration and spectral characterization of an active photonic based nulling interferometer}
+
+\author{Vincent Foriel\inst{1},
+    Marc-Antoine Martinod\inst{1},
+    Nick Cvetojevick\inst{1},
+    Frantz Martinache\inst{1},
+    Sylvie Robbe-Dubois\inst{1}
+    \and
+    Roxanne Ligi\inst{1}
+}
+\authorrunning{Foriel et al.}
+
+\institute{Université Côte d’Azur, Observatoire de la Côte d’Azur Nice, CNRS, Laboratoire Lagrange, Nice, France
+    \and
+    KU Leuven university, Leuven, Belgium
+}
+
+\date{Received ---; accepted ---}
+
+% \abstract{}{}{}{}{} 
+% 5 {} token are mandatory
+
+\abstract
+% context heading (optional)
+{L'interférométrie annulante est une technique prometteuse pour la détection directe d'exoplanètes, adressant aussi bien le problème de résolution angulaire et de contraste, mais requièrent un contrôle de phase extrême. L'utilisation de composants photoniques intégrés, tels que les interféromètres multimodes (MMI), permet de compacifier et stabiliser ces instruments. Cependant, les défauts de fabrication et différences de chemins optiques résiduels en amont dégradent rapidement la qualité des observables produits}
+% aims heading (mandatory)
+{Notre objectif est de présenter une méthode robuste pour la caractérisation spectrale et la calibration d'un MMI 4x4 équipé de 4 déphaseurs thermo-optiques, permettant de réaliser des opérations de Kernel-Nulling.}
+% methods heading (mandatory)
+{Nous utilisons une méthode de scan systématique des déphaseurs avec différentes combinaisons d'entrées (seule, paires, triplets, toutes). En analysant les flux de sortie en fonction de la phase injectée, nous ajustons les franges observées avec un modèle matriciel. La fréquence des modulations observées permet de calibrer la réponse des déphaseurs (relation puissance-phase), tandis que l'amplitude et la phase relative des franges permettent de reconstruire la matrice de transfert complexe du composant MMI.}
+% results heading (mandatory)
+{\hl{TODO}}
+% conclusions heading (optional), leave it empty if necessary 
+{\hl{TODO}}
+
+\keywords{Active, Photonic, Tunable, Kernel, Nulling, Interferometry, Direct Detection, Exoplanet, Characterization, MMI}
+
+\maketitle
+
+%-------------------------------------------------------------------
+
+\section{Introduction}
+
+L'interférométrie annulante (Nulling Interferometry) proposée par \cite{Bracewell1979} permet d'éteindre la lumière d'une étoile pour révéler ses compagnons planétaires. Cependant, cette technique reste très sensible aux défauts instrumentaux. Des architectures plus avancées comme le Double Bracewell ou le Kernel-Nulling \citep{Martinache2018} permettent de pallier partiellement à ce problème en produisant des observables auto-calibrés, robustes aux aberrations de phase de bas ordre.
+
+Dans ce papier, nous nous concentrons sur un composant photonique intégré composé d'un MMI 4x4 (Multi-Mode Interferometer) qui réalise le mélange des faisceaux (Fig. \ref{fig:mmi}). Pour pallier les imperfections de fabrication et contrôler précisément les phases, des déphaseurs thermo-optiques sont placés sur les guides d'ondes en amont du MMI. Nous présentons ici une méthode complète pour calibrer ces déphaseurs, caractériser la matrice de transfert du MMI et emmener le composant à son point de fonctionnement.
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=0.5\textwidth]{img/MMI.png}
+    \caption{Exemple de propagation de la lumière dans un MMI 4x4. \hl{A remplacer par notre MMI}}. L'opération produite par un MMI dépend principalement de sa géométrie et de la phase des faiseaux d'entrée.
+    \label{fig:mmi}
+\end{figure}
+
+%-------------------------------------------------------------------
+
+\section{Méthode de Caractérisation}
+
+\subsection{Calibration des déphaseurs}
+
+La calibration des déphaseurs vise à caractériser la relation entre la puissance électrique appliquée et le déphasage optique induit. Pour ce faire, nous illuminons les quatre entrées du composant tout en appliquant une rampe de puissance individuellement sur chaque déphaseur.
+
+Lorsqu'un déphasage est induit sur l'un des guides d'onde, l'intensité $O_k(x_j)$ mesurée sur la sortie $k$ évolue selon la relation :
+
+\begin{equation}
+    O_k(x_j) = (\alpha_k + A_k x_j) \sin(\omega x_j + \phi_k) + B_k x_j + C_k
+\end{equation}
+
+où $x_j$ représente la puissance électrique injectée sur le déphaseur $j$. Les paramètres $\alpha$, $\omega$, $\phi$ et $C$ correspondent respectivement à l'amplitude, la pulsation, la phase et l'offset moyen de la modulation d'interférence. Les termes correctifs $A$ et $B$ ont été introduits pour modéliser les dérives linéaires d'amplitude et de fond, attribuées aux instabilités thermiques et mécaniques du banc de test. Bien que sans intérêt physique pour la caractérisation du composant, leur inclusion dans le modèle d'ajustement est nécessaire pour extraire précisément les paramètres d'intérêt ($\omega$, $\alpha$, $\phi$) en présence de perturbations environnementales.
+
+L'identification du paramètre $\omega$ lors de l'étape de calibration permet d'établir la relation de conversion entre puissance injectée et phase optique. Il est alors possible de reformuler l'équation précédente en fonction de la phase $\varphi_j$ :
+
+\begin{equation}
+    \label{eq:out}
+    O_k(\varphi_j) = (\alpha_k + A_k\varphi_j) \sin(\varphi_j + \phi_k) + B_k\varphi_j + C_k
+\end{equation}
+
+\subsection{Matrice de transfert}
+
+Une fois les lois de commande des déphaseurs établies, nous procédons à la caractérisation complète du composant. Le système est modélisé par sa matrice de transfert complexe $\mathbf{M}$ (supposée unitaire), reliant le vecteur des champs d'entrée $\mathbf{E}_{in}$ au vecteur des champs de sortie $\mathbf{E}_{out}$ :
+
+\begin{equation}
+    \vec{E}_{out} =  \mathbf{C_{out}} \cdot \mathbf{M} \cdot \mathbf{P} \cdot \mathbf{C_{in}} \cdot \vec{E}_{in}
+\end{equation}
+
+où $\mathbf{C_{in}}$ et $\mathbf{C_{out}}$ sont des matrices de cross-talk, et $\mathbf{P}$ est la matrice diagonale $P_{kk} = e^{i\varphi_k}$ correspondant aux déphasages induits par les déphaseurs.
+
+Etant donné que nous n'avons accès qu'à l'intensité des champs $O_k = |E_{k,out}|^2$, nous nous trouvons dans un cas dégénéré où les effets $\mathbf{M}$ du MMI sont indissociables des effets de cross-talk en amont et en aval de ce dernier. On a alors :
+
+\begin{equation}
+    \begin{split}
+        \vec{O} & = \left(\mathbf{C_{out}} \cdot \mathbf{M} \cdot \mathbf{P} \cdot \mathbf{C_{in}} \cdot \vec{E}_{in} \right)^\dagger \left(\mathbf{C_{out}} \cdot \mathbf{M} \cdot \mathbf{P} \cdot \mathbf{C_{in}} \cdot \vec{E}_{in}\right)            \\
+                & = \vec{E}_{in}^\dagger \cdot \mathbf{C_{in}}^\dagger \cdot \mathbf{P}^\dagger \cdot \mathbf{M}^\dagger \cdot \mathbf{C_{out}}^\dagger \cdot \mathbf{C_{out}} \cdot \mathbf{M} \cdot \mathbf{P} \cdot \mathbf{C_{in}} \cdot \vec{E}_{in} \\
+                & = \vec{E}_{in}^\dagger \cdot \mathbf{C_{in}}^\dagger \cdot \mathbf{P}^\dagger \cdot \mathbf{A} \cdot \mathbf{P} \cdot \mathbf{C_{in}} \cdot \vec{E}_{in}
+    \end{split}
+\end{equation}
+
+Etant donné que M et Cout sont indissociables et qu'on s'attend de toute façon a ce que M ne soit pas parfait, on regroupe les deux en une matrice $\mathbf{A}$ que l'on associera à la matrice de transfert complexe du MMI.
+
+On aimerait alors déterminer les paramètres de la matrice $\mathbf{A}$ ainsi que le cross-talk $\mathbf{C_{in}}$.
+L'injection dans le composant est pilotée par un miroir segmenté déformable dont 4 des segments sont associés individuellement à une entrée unique. L'extinction d'une voie est réalisée en inclinant le segment correspondant pour dévier le faisceau hors du guide d'onde. Cette méthode mécanique étant imparfaite, une intensité résiduelle non négligeable persiste même lorsque la voie est nominalement éteinte ("OFF").
+En l'absence de métrologie directe du champ injecté, il est donc nécessaire d'estimer $\vec{E}_{in}$ pour les états activés comme pour les états éteints.
+
+Pour résoudre ce problème inverse, nous exploitons la redondance des données acquises. Le protocole de caractérisation balaye l'ensemble des 16 combinaisons d'entrées possibles ($2^4$). Pour chaque combinaison, les 4 déphaseurs sont scannés individuellement, produisant chacun 4 signaux de modulation en sortie. Cela représente un total de $16 \times 4 \times 4 = 256$ observables (amplitudes et phases des franges).
+Face à cela, le modèle dépend d'un nombre restreint de paramètres inconnus : les coefficients complexes de la matrice de transfert $\mathbf{A}$ ($4\times4$), ceux de la matrice de cross-talk $\mathbf{C_{in}}$ ($4\times4$), ainsi que les champs complexes injectés pour chaque voie active ou éteintes. En comptant les parties réelles et imaginaires, nous avons environ 80 degrés de liberté. Le système est donc largement surdéterminé, ce qui permet une reconstruction robuste par ajustement de modèle.
+
+Nous cherchons ainsi à déterminer $\mathbf{A}$, $\mathbf{C_{in}}$ et $\vec{E}_{in}$ en minimisant l'écart entre le modèle et les mesures. Plusieurs contraintes sont ajoutées pour garantir la convergence vers une solution physique et réduire voir lever les dégénérescences :
+\begin{itemize}
+    \item La matrice $\mathbf{A}$ est contrainte à être unitaire ($\mathbf{A}^\dagger\mathbf{A} = \mathbf{I}$), ce qui suppose une recombinaison sans perte ni gain au sein du MMI.
+    \item La norme spectrale de la matrice de cross-talk $\mathbf{C_{in}}$ est bornée par 1 ($\|\mathbf{C_{in}}\|_2 \le 1$) afin d'autoriser physiquement les pertes d'injection. Un terme de régularisation favorise cependant des normes proches de 1, sous l'hypothèse de faibles pertes.
+\end{itemize}
+
+L'optimisation est initialisée avec $\mathbf{A} = \mathbf{C_{in}} = \mathbf{I}$ et avec $\vec{E}_{in}$ et $\vec{E}_{out}$ des vecteurs uniformes de phase nulle et d'amplitude respectivement $1$ et $0$. On s'attend à ce que $\mathbf{C_{in}}$ reste proche de l'identité tandis que $\mathbf{A}$ convergera vers la matrice de mélange réelle du MMI. On s'attend également à ce que le résultat converge a une phase absolue près, n'intervenant pas dans les opérations interferométriques.
+
+
+
+%--------------------------------------------------------------------
+
+Les matrices et vecteurs ainsi reconstruits sont les suivants :
+
+\begin{equation}
+    \mathbf{A} = \begin{bmatrix}
+        0.49 e^{i(-0.10)\pi} & 0.50 e^{i(-0.35)\pi} & 0.50 e^{i(0.13)\pi} & 0.51 e^{i(-0.21)\pi} \\
+        0.50 e^{i(-0.50)\pi} & 0.49 e^{i(0.74)\pi}  & 0.52 e^{i(0.21)\pi} & 0.50 e^{i(0.40)\pi}  \\
+        0.50 e^{i(-0.73)\pi} & 0.50 e^{i(-0.50)\pi} & 0.49 e^{i(0.99)\pi} & 0.50 e^{i(0.17)\pi}  \\
+        0.51 e^{i(0.89)\pi}  & 0.51 e^{i(-0.35)\pi} & 0.49 e^{i(0.13)\pi} & 0.49 e^{i(0.79)\pi}  \\
+    \end{bmatrix}
+\end{equation}
+
+\begin{equation}
+    \mathbf{C_{in}} = \begin{bmatrix}
+        0.01 e^{i(0.64)\pi}  & 0.01 e^{i(0.54)\pi}  & 0.01 e^{i(0.71)\pi}  & 0.97 e^{i(-0.44)\pi} \\
+        0.02 e^{i(0.52)\pi}  & 0.04 e^{i(0.42)\pi}  & 0.95 e^{i(-0.21)\pi} & 0.03 e^{i(-0.44)\pi} \\
+        0.03 e^{i(-0.46)\pi} & 0.93 e^{i(-0.14)\pi} & 0.02 e^{i(-0.46)\pi} & 0.02 e^{i(0.67)\pi}  \\
+        0.96 e^{i(-0.05)\pi} & 0.03 e^{i(-0.04)\pi} & 0.02 e^{i(-0.24)\pi} & 0.01 e^{i(-0.02)\pi} \\
+    \end{bmatrix}
+\end{equation}
+
+\begin{equation}
+    \vec{E_{in, ON}} = \begin{bmatrix}
+        41.02 e^{i(-0.11)\pi} \\
+        39.35 e^{i(-0.25)\pi} \\
+        38.66 e^{i(-0.20)\pi} \\
+        36.68 e^{i(0.32)\pi}  \\
+    \end{bmatrix}
+    , \quad
+    \vec{E_{in, OFF}} = \begin{bmatrix}
+        0.18 e^{i(0.84)\pi}  \\
+        0.67 e^{i(-0.25)\pi} \\
+        2.72 e^{i(-0.35)\pi} \\
+        1.34 e^{i(0.17)\pi}  \\
+    \end{bmatrix}
+\end{equation}
+
+En utilisant ces paramètres, on peut calculer les champs de sortie pour chaque état de l'expérience et vérifier la validité de ce modèle matriciel :
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=0.6\linewidth]{img/response_1_input.png}
+    \caption{Réponse du MMI pour une entrée unique.}
+    \label{fig:response_1_input}
+\end{figure}
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=0.9\linewidth]{img/response_2_input.png}
+    \caption{Réponse du MMI pour deux entrées.}
+    \label{fig:response_2_inputs}
+\end{figure}
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=0.6\linewidth]{img/response_3_input.png}
+    \caption{Réponse du MMI pour trois entrées.}
+    \label{fig:response_3_inputs}
+\end{figure}
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=0.2\linewidth]{img/response_4_input.png}
+    \caption{Réponse du MMI pour quatre entrées.}
+    \label{fig:response_4_inputs}
+\end{figure}
+
+Le modèle converge de manière satisfaisante vers les données observées, bien que des écarts résiduels persistent. La robustesse de ce résultat a été éprouvée en testant différentes fonctions de coût ainsi que diverses contraintes, telles que l'assouplissement de l'unitarité de $\mathbf{A}$ pour prendre en compte les pertes, l'imposition d'une unitarité stricte sur $\mathbf{C_{in}}$, ou encore la fixation de la phase du premier injecteur ($I_{1,ON}$) à zéro pour lever la dégénérescence de phase absolue. La stabilité des solutions obtenues suggère que les écarts résiduels proviennent davantage des limitations intrinsèques du modèle que de la procédure d'ajustement.
+
+Nous pouvons néanmoins exploiter la matrice $\mathbf{A}$ extraite pour valider le comportement du MMI. En simulant l'injection de faisceaux de référence (intensité unitaire, phase nulle), nous calculons les champs de sortie résultants et visualisons la recombinaison effective des champs à l'aide de représentations polaires.
+
+L'optimisation des phases d'injection pour maximiser le flux sur une sortie donnée révèle la structure de la recombinaison : une sortie constructive, une sortie de type Double Bracewell, et deux sorties en quadrature de phase symétriques entre elles. Cette configuration confirme la capacité du composant à réaliser les opérations de Kernel-Nulling (Fig. \ref{fig:not_calibrated_phases_matrix_model} et \ref{fig:calibrated_phases_matrix_model}).
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=0.6\linewidth]{img/not_calibrated_phases_matrix_model.png}
+    \caption{Réponse du MMI pour quatre entrées pour des faisceaux injectés parfaitement cophasés.}
+    \label{fig:not_calibrated_phases_matrix_model}
+\end{figure}
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=0.6\linewidth]{img/calibrated_phases_matrix_model.png}
+    \caption{Réponse du MMI pour quatre entrées pour des faisceaux injectés dont la phase est optimisée.}
+    \label{fig:calibrated_phases_matrix_model}
+\end{figure}
+
+%-----------------------------------------------------------------
+
+\section{Conclusion}
+
+Cette méthode de scan systématique permet de transformer un composant passif inconnu (MMI avec défauts) en un système parfaitement caractérisé et contrôlé. L'utilisation des déphaseurs intégrés comme outil de métrologie interne (self-calibration) est un atout majeur pour la stabilité et la simplicité de mise en oeuvre des nullers photoniques.
+
+\begin{acknowledgements}
+    \hl{ToDo}
+\end{acknowledgements}
+
+\bibliographystyle{aa}
+\nocite{*}
+\bibliography{refs}
+
+\end{document}

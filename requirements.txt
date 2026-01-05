@@ -10,3 +10,7 @@ jupyterlab
 ipykernel
 fitter
 torch
+joblib
+ipywidgets
+toml
+tqdm

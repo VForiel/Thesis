@@ -1,0 +1,85 @@
+% Thesis Structure & Preamble
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[english]{babel}
+
+% Ignore harmless warnings and errors
+\usepackage{silence}
+\ErrorFilter{biblatex}{Patching \addtocontents failed}
+
+% Document Layout
+\usepackage{scrhack} % Helpful for other conflicts
+\usepackage[a4paper, total={170mm,257mm}, left=20mm, top=20mm]{geometry}
+
+% Math & Physics
+\usepackage{amsmath, amssymb, amsfonts}
+\usepackage{siunitx} % Loaded before physics
+\usepackage{physics}
+\AtBeginDocument{\RenewCommandCopy\qty\SI}
+
+% Silence siunitx warning using expl3 (modern method) -> must be after packages are loaded
+\ExplSyntaxOn
+\msg_redirect_name:nnn { siunitx } { physics-pkg } { none }
+\ExplSyntaxOff
+
+% Quotes
+\usepackage{csquotes}
+
+% Graphics
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage{subcaption}
+\usepackage{xcolor}
+
+% Bibliography with workaround for patching error
+\makeatletter
+\def\blx@patchcontents{}
+\makeatother
+\usepackage[backend=biber,style=authoryear,natbib=true]{biblatex}
+\addbibresource{references.bib}
+
+% Code highlighting
+\usepackage{listings}
+\usepackage{xcolor}
+\definecolor{codegreen}{rgb}{0,0.6,0}
+\definecolor{codegray}{rgb}{0.5,0.5,0.5}
+\definecolor{codepurple}{rgb}{0.58,0,0.82}
+\definecolor{backcolour}{rgb}{0.95,0.95,0.92}
+
+\lstdefinestyle{mystyle}{
+    backgroundcolor=\color{backcolour},
+    commentstyle=\color{codegreen},
+    keywordstyle=\color{magenta},
+    numberstyle=\tiny\color{codegray},
+    stringstyle=\color{codepurple},
+    basicstyle=\ttfamily\footnotesize,
+    breakatwhitespace=false,
+    breaklines=true,
+    captionpos=b,
+    keepspaces=true,
+    numbers=left,
+    numbersep=5pt,
+    showspaces=false,
+    showstringspaces=false,
+    showtabs=false,
+    tabsize=2
+}
+\lstset{style=mystyle}
+
+% Hyperlinks
+\usepackage{hyperref}
+\hypersetup{
+    colorlinks=true,
+    linkcolor=blue,
+    filecolor=magenta,
+    urlcolor=cyan,
+    citecolor=blue,
+    pdftitle={Tunable Kernel Nulling Thesis},
+    pdfpagemode=FullScreen,
+}
+
+% Macros
+\newcommand{\phise}{\texttt{PHISE}}
+\newcommand{\phobos}{\texttt{PHOBos}}
+\newcommand{\degree}{^{\circ}}
