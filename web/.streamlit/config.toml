@@ -10,7 +10,7 @@ level = "info"
 
 [client]
 showErrorDetails = true
-toolbarMode = "minimal"
+toolbarMode = "auto"
 
 [browser]
 gatherUsageStats = false
