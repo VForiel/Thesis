@@ -463,7 +463,7 @@ class SuperKN(Chip):
         n_out = len(out1)
         outs = np.array([out1, out2, out3, out4])
 
-        _, axs = plt.subplots(n_out, 1, figsize=(5, 5*n_out), subplot_kw={'projection': 'polar'})
+        _, axs = plt.subplots(1, n_out, figsize=(4*n_out,4), subplot_kw={'projection': 'polar'})
         
         if n_out == 1:
             axs = [axs]

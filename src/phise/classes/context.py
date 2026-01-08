@@ -31,6 +31,9 @@ from .archs import superkn, SuperKN
 from ..modules import coordinates
 from ..modules import signals
 from ..modules import phase
+from ..modules.calibration import calibrate_gen as _calibrate_gen
+from ..modules.calibration import calibrate_obs as _calibrate_obs
+from ..modules.calibration import calibrate_abcd as _calibrate_abcd
 
 class Context:
     """
@@ -742,6 +745,9 @@ class Context:
         ) -> dict:
         """Optimize phase shifter offsets to maximize nulling performance.
 
+        .. deprecated:: 1.0
+            Use :func:`phise.modules.calibration.calibrate_gen` directly instead.
+
         Args:
             β (float): Decay factor for the step size (0.5 <= β < 1).
             verbose (bool): If ``True``, print optimization progress.
@@ -752,115 +758,7 @@ class Context:
         Returns:
             dict: Dictionary with optimization history (depth, shifters).
         """
-
-        self.Δh = self.interferometer.camera.e.to(u.hour).value * u.hourangle
-
-        ψ = np.sqrt(self.pf.to(1/self.interferometer.camera.e.unit).value) * (1 + 0j) # Perfectly cophased inputs
-        total_execpted_photons = np.sum(np.abs(ψ)**2)
-
-        ε = 1e-6 * self.interferometer.λ.unit # Minimum shift step size
-
-        # Shifters that contribute to redirecting light to the bright output
-        φb = [1, 2, 3, 4, 5, 7]
-
-        # Shifters that contribute to the symmetry of the dark outputs
-        φk = [6, 8, 9, 10, 11, 12, 13, 14]
-
-        # History of the optimization
-        depth_history = []
-        shifters_history = []
-
-        Δφ = self.interferometer.λ / 4
-        while Δφ > ε:
-
-            if verbose:
-                print(f"--- New iteration --- Δφ={Δφ:.2e}")
-
-            for i in φb + φk:
-                log = ""
-
-                # Getting observation with different phase shifts
-                self.interferometer.chip.φ[i-1] += Δφ
-                outs_pos = self.observe()
-
-                self.interferometer.chip.φ[i-1] -= 2*Δφ
-                outs_neg = self.observe()
-
-                self.interferometer.chip.φ[i-1] += Δφ
-                outs_old = self.observe()
-
-                b_pos = outs_pos[0]
-                b_neg = outs_neg[0]
-                b_old = outs_old[0]
-                k_old = 1/3 * np.sum(np.abs(self.interferometer.chip.process_outputs(outs_old)))
-                k_pos = 1/3 * np.sum(np.abs(self.interferometer.chip.process_outputs(outs_pos)))
-                k_neg = 1/3 * np.sum(np.abs(self.interferometer.chip.process_outputs(outs_neg)))
-
-                # Save the history
-                depth_history.append(k_old / b_old)
-                shifters_history.append(np.copy(self.interferometer.chip.φ.value))
-
-                # Maximize the bright metric for group 1 shifters
-                if i in φb:
-                    log += f"Shift {i} Bright: {b_neg:.2e} | {b_old:.2e} | {b_pos:.2e} -> "
-
-                    if b_pos > b_old and b_pos > b_neg:
-                        log += " + "
-                        self.interferometer.chip.φ[i-1] += Δφ
-                    elif b_neg > b_old and b_neg > b_pos:
-                        log += " - "
-                        self.interferometer.chip.φ[i-1] -= Δφ
-                    else:
-                        log += " = "
-
-                # Minimize the kernel metric for group 2 shifters
-                else:
-                    log += f"Shift {i} Kernel: {k_neg:.2e} | {k_old:.2e} | {k_pos:.2e} -> "
-
-                    if k_pos < k_old and k_pos < k_neg:
-                        self.interferometer.chip.φ[i-1] += Δφ
-                        log += " + "
-                    elif k_neg < k_old and k_neg < k_pos:
-                        self.interferometer.chip.φ[i-1] -= Δφ
-                        log += " - "
-                    else:
-                        log += " = "
-                
-                if verbose:
-                    print(log)
-
-            Δφ *= β
-
-        self.interferometer.chip.φ = phase.bound(self.interferometer.chip.φ, self.interferometer.λ)
-
-        if plot:
-
-            shifters_history = np.array(shifters_history)
-
-            _, axs = plt.subplots(2,1, figsize=figsize, constrained_layout=True)
-
-            axs[0].plot(depth_history)
-            axs[0].set_xlabel("Iterations")
-            axs[0].set_ylabel("Kernel-Null depth")
-            axs[0].set_yscale("log")
-            axs[0].set_title("Performance of the Kernel-Nuller")
-
-            for i in range(shifters_history.shape[1]):
-                axs[1].plot(shifters_history[:,i], label=f"Shifter {i+1}")
-            axs[1].set_xlabel("Iterations")
-            axs[1].set_ylabel("Phase shift")
-            axs[1].set_yscale("linear")
-            axs[1].set_title("Convergence of the phase shifters")
-            # axs[1].legend(loc='upper right')
-
-            if save_as:
-                utils.save_plot(save_as, "genetic_calibration.png")
-            plt.show()
-
-        return {
-            "depth": np.array(depth_history),
-            "shifters": np.array(shifters_history),
-        }
+        return _calibrate_gen(self, β, verbose=verbose, plot=plot, figsize=figsize, save_as=save_as)
     
     # Obstruction calibration -------------------------------------------------
 
@@ -873,6 +771,9 @@ class Context:
         ):
         """Optimize calibration via least squares sampling.
 
+        .. deprecated:: 1.0
+            Use :func:`phise.modules.calibration.calibrate_obs` directly instead.
+
         Args:
             n (int): Number of sampling points for least squares.
             plot (bool): If ``True``, plot the optimization process.
@@ -882,163 +783,43 @@ class Context:
         Returns:
             None | Context: New context with optimized kernel nuller (if implemented to return).
         """
+        return _calibrate_obs(self, n=n, plot=plot, figsize=figsize, save_as=save_as)
 
+    # ABCD calibration -------------------------------------------------------
 
-        chip = self.interferometer.chip
-        input_attenuation_backup = chip.input_attenuation.copy()
-        λ = self.interferometer.λ
-        e = self.interferometer.camera.e
-        total_photons = np.sum(self.pf.to(1/e.unit).value) * e.value
+    def calibrate_abcd(
+            self,
+            n_loops: int = 2,
+            n_final_samples: int = 64,
+            plot: bool = False,
+            verbose: bool = False,
+            figsize: tuple = (12, 6),
+            save_as = None,
+        ):
+        """Calibrate phase shifters using ABCD loops with a final fine sweep.
 
-        if plot:
-            _, axs = plt.subplots(6, 3, figsize=figsize, constrained_layout=True)
-            for i in range(7):
-                axs.flatten()[i].set_xlabel("Phase shift")
-                axs.flatten()[i].set_ylabel("Throughput")
+        This wrapper dispatches to :func:`phise.modules.calibration.calibrate_abcd`.
 
-        def maximize_bright(p, plt_coords=None):
+        Args:
+            n_loops (int): Number of ABCD passes over all shifters (default: 2).
+            n_final_samples (int): Samples used in the final dense sweep (default: 64).
+            plot (bool): If ``True``, plot calibration convergence.
+            verbose (bool): If ``True``, print debug information for each shifter.
+            figsize (tuple): Figure size for plots.
+            save_as (str): Directory path to save plots when ``plot=True``.
 
-            x = np.linspace(0, λ.value,n)
-            y = np.empty(n)
-
-            if isinstance(p,list):
-                Δp = (chip.φ[p[1]-1] - chip.φ[p[0]-1]) % λ
-
-            for i in range(n):
-
-                if isinstance(p,list):
-                    chip.φ[p[0]-1] = x[i] * λ.unit
-                    chip.φ[p[1]-1] = (chip.φ[p[0]-1] + Δp) % λ
-                else:
-                    chip.φ[p-1] = x[i] * λ.unit
-            
-                outs = self.observe()
-                y[i] = outs[0] / total_photons
-            
-            def sin(x, x0):
-                return (np.sin((x-x0)/λ.value*2*np.pi)+1)/2 * (np.max(y)-np.min(y)) + np.min(y)
-            
-            # Fit sin using scipy.optimize.minimize
-            popt = scipy.optimize.minimize(lambda x0: np.sum((y - sin(x, x0))**2), x0=[0], method='Nelder-Mead').x
-
-            if isinstance(p,list):
-                chip.φ[p[0]-1] = (np.mod(popt[0]+λ.value/4, λ.value) * λ.unit).to(chip.φ.unit)
-                chip.φ[p[1]-1] = (chip.φ[p[0]-1] + Δp) % λ
-            else:
-                chip.φ[p-1] = (np.mod(popt[0]+λ.value/4, λ.value) * λ.unit).to(chip.φ.unit)
-
-            if plot:
-                axs[plt_coords].set_title(rf"$|B(\phi{p})|$")
-                axs[plt_coords].scatter(x, y, label='Data', color='tab:blue')
-                axs[plt_coords].plot(x, sin(x, *popt), label='Fit', color='tab:orange')
-                axs[plt_coords].axvline(x=np.mod(popt[0]+λ.value/4, λ.value), color='k', linestyle='--', label='Optimal phase shift')
-                axs[plt_coords].set_xlabel(f"Phase shift ({λ.unit})")
-                axs[plt_coords].set_ylabel("Bright throughput")
-                axs[plt_coords].legend()
-
-        def minimize_kernel(p, m, plt_coords=None):
-
-            x = np.linspace(0,λ.value,n)
-            y = np.empty(n)
-
-            for i in range(n):
-                chip.φ[p-1] = x[i] * λ.unit
-                outs = self.observe()
-                ker = self.interferometer.chip.process_outputs(outs)
-                y[i] = ker[m-1]
-
-            def sin(x, x0):
-                return (np.sin((x-x0)/λ.value*2*np.pi)+1)/2 * (np.max(y)-np.min(y)) + np.min(y)
-            
-            # Fit sin using scipy.optimize.minimize
-            popt = scipy.optimize.minimize(lambda x0: np.sum((y - sin(x, x0))**2), x0=[0], method='Nelder-Mead').x
-
-            chip.φ[p-1] = (np.mod(popt[0], λ.value) * λ.unit).to(chip.φ.unit)
-
-            if plot:
-                axs[plt_coords].set_title(rf"$K_{m}(\phi{p})$")
-                axs[plt_coords].scatter(x, y, label='Data', color='tab:blue')
-                axs[plt_coords].plot(x, sin(x, *popt), label='Fit', color='tab:orange')
-                axs[plt_coords].axvline(x=np.mod(popt[0], λ.value), color='k', linestyle='--', label='Optimal phase shift')
-                axs[plt_coords].set_xlabel(f"Phase shift ({λ.unit})")
-                axs[plt_coords].set_ylabel("Kernel throughput")
-                axs[plt_coords].legend()
-
-        def maximize_darks(p, ds, plt_coords=None):
-
-            # Init data arrays
-            x = np.linspace(0, λ.value, n)
-            y = np.empty(n)
-
-            # Sampling
-            for i in range(n):
-                # Set phase shift
-                chip.φ[p-1] = x[i] * λ.unit
-                # Get outputs intensities
-                outs = self.observe()
-                # Compute |Di|² + |Dj|²
-                y[i] = np.sum(np.abs(outs[np.array(ds)]))
-
-            # Model
-            def sin(x, x0):
-                return (np.sin((x-x0)/λ.value*2*np.pi)+1)/2 * (np.max(y)-np.min(y)) + np.min(y)
-            
-            # Fit sin using scipy.optimize.minimize
-            popt = scipy.optimize.minimize(lambda x0: np.sum((y - sin(x, x0))**2), x0=[0], method='Nelder-Mead').x
-
-            # Update phase shift
-            chip.φ[p-1] = (np.mod(popt[0]+λ.value/4, λ.value) * λ.unit).to(chip.φ.unit)
-
-            # Plotting
-            if plot:
-                axs[plt_coords].set_title(rf"$|D_{ds[0]}(\phi{p})| + |D_{ds[1]}(\phi{p})|$")
-                axs[plt_coords].scatter(x, y, label='Data', color='tab:blue')
-                axs[plt_coords].plot(x, sin(x, *popt), label='Fit', color='tab:orange')
-                axs[plt_coords].axvline(x=np.mod(popt[0]+λ.value/4, λ.value), color='k', linestyle='--', label='Optimal phase shift')
-                axs[plt_coords].set_xlabel(f"Phase shift ({λ.unit})")
-                axs[plt_coords].set_ylabel(f"Dark pair {ds} throughput")
-                axs[plt_coords].legend()
-
-        # Bright maximization
-        self.interferometer.chip.input_attenuation = [1, 1, 0, 0]
-        maximize_bright(2, plt_coords=(0,0))
-
-        self.interferometer.chip.input_attenuation = [0, 0, 1, 1]
-        maximize_bright(4, plt_coords=(0,1))
-
-        self.interferometer.chip.input_attenuation = [1, 0, 1, 0]
-        maximize_bright(7, plt_coords=(0,2))
-
-        # Darks maximization
-        self.interferometer.chip.input_attenuation = [1, 0, 0, -1]
-        maximize_darks(8, [1,2], plt_coords=(1,0))
-
-        # Kernel minimization
-        self.interferometer.chip.input_attenuation = [1, 0, 0, 0]
-        minimize_kernel(11, 1, plt_coords=(2,0))
-        minimize_kernel(13, 2, plt_coords=(2,1))
-        minimize_kernel(14, 3, plt_coords=(2,2))
-
-        # Find global minimum
-        if not self.monochromatic:
-            # Bright maximization
-            self.interferometer.chip.input_attenuation = [1, 1, 0, 0]
-            maximize_bright([1,2], plt_coords=(3,0))
-            self.interferometer.chip.input_attenuation = [0, 0, 1, 1]
-            maximize_bright([3,4], plt_coords=(3,1))
-            self.interferometer.chip.input_attenuation = [1, 0, 1, 0]
-            maximize_bright([5,7], plt_coords=(3,2))
-
-        chip.φ = phase.bound(chip.φ, λ)
-        chip.input_attenuation = input_attenuation_backup
-
-        if plot:
-            axs[1,1].axis('off')
-            axs[1,2].axis('off')
-            
-            if save_as:
-                utils.save_plot(save_as, "obstruction_calibration.png")
-            plt.show()
+        Returns:
+            dict: Calibration summary containing the updated context, history, and final phases.
+        """
+        return _calibrate_abcd(
+            self,
+            n_loops=n_loops,
+            n_final_samples=n_final_samples,
+            plot=plot,
+            verbose=verbose,
+            figsize=figsize,
+            save_as=save_as,
+        )
 
     #==============================================================================
     # VLTI Context
