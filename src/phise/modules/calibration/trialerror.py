@@ -156,7 +156,6 @@ def calibrate_gen(
         if save_as:
             from ..utils import save_plot
             save_plot(save_as, "genetic_calibration.png")
-        plt.show()
 
     return {
         "depth": np.array(depth_history),

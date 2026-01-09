@@ -150,7 +150,7 @@ with left_col:
             "x (m)": f"{tel.r.to(u.m).value[0]:.1f}",
             "y (m)": f"{tel.r.to(u.m).value[1]:.1f}",
         })
-    st.dataframe(pd.DataFrame(tel_data), hide_index=True, use_container_width=True)
+    st.dataframe(pd.DataFrame(tel_data), hide_index=True, width="stretch")
     st.info(f"Defined in base context")
     
     st.divider()
@@ -181,7 +181,7 @@ with right_col:
 
         img_bytes = ctx.plot_projected_positions(N=n_baselines, return_image=True)
 
-        st.image(img_bytes, use_container_width=True, caption="Projected telescope positions during observation")
+        st.image(img_bytes, width="stretch", caption="Projected telescope positions during observation")
 
     except Exception as e:
         st.error(f"❌ Error generating figure: {str(e)}")

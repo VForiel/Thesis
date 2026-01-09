@@ -75,7 +75,7 @@ def render_calibration_result(result: dict):
                 ax2.text(0.5, 0.5, 'No phase history available', ha='center', va='center')
 
             plt.tight_layout()
-            st.pyplot(fig, use_container_width=True)
+            st.pyplot(fig, width="stretch")
             plt.close(fig)
 
 st.set_page_config(
@@ -255,7 +255,7 @@ st.markdown("## Simulation Controls")
 col1, col2, col3 = st.columns(3)
 
 with col1:
-    if st.button("▶️ Run Simulation", use_container_width=True):
+    if st.button("▶️ Run Simulation", width="stretch"):
         st.session_state.pop("calibration_result", None)
         st.session_state.pop("show_calibration", None)
         st.session_state.pop("ncore_result", None)
@@ -263,7 +263,7 @@ with col1:
         st.session_state.run_sim = True
 
 with col2:
-    if st.button("🎯 Calibrate Phases", use_container_width=True):
+    if st.button("🎯 Calibrate Phases", width="stretch"):
         st.session_state.pop("calibration_result", None)
         st.session_state.pop("show_calibration", None)
         st.session_state.pop("ncore_result", None)
@@ -271,7 +271,7 @@ with col2:
         st.session_state.calibrate_phases = True
 
 with col3:
-    if st.button("⚙️ Optimize n_core", use_container_width=True):
+    if st.button("⚙️ Optimize n_core", width="stretch"):
         st.session_state.pop("calibration_result", None)
         st.session_state.pop("show_calibration", None)
         st.session_state.pop("ncore_result", None)
@@ -306,7 +306,7 @@ if st.session_state.get("run_sim"):
             verbose=False
         )
         
-        st.pyplot(fig, use_container_width=True)
+        st.pyplot(fig, width="stretch")
         
         # Output analysis
         st.subheader("Output Analysis")
@@ -514,7 +514,7 @@ if st.session_state.get("show_ncore") and st.session_state.get("ncore_result"):
             )
 
     plt.tight_layout()
-    st.pyplot(fig, use_container_width=True)
+    st.pyplot(fig, width="stretch")
     plt.close(fig)
 
     # Best summary and apply button

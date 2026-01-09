@@ -69,11 +69,11 @@ def context_widget(
                 key=f"{key_prefix}_preset",
             )
         with preset_cols[1]:
-            if st.button("Load Preset", key=f"{key_prefix}_load", use_container_width=True):
+            if st.button("Load Preset", key=f"{key_prefix}_load", width="stretch"):
                 st.session_state[ctx_key] = copy(presets[selected_preset])
                 st.rerun()
         with preset_cols[2]:
-            if st.button("Reset to Default", key=f"{key_prefix}_reset", use_container_width=True):
+            if st.button("Reset to Default", key=f"{key_prefix}_reset", width="stretch"):
                 st.session_state[ctx_key] = copy(presets[default_preset])
                 st.rerun()
 
@@ -198,7 +198,7 @@ def context_widget(
                 edited_tel = st.data_editor(
                     pd.DataFrame(tel_data),
                     num_rows="dynamic",
-                    use_container_width=True,
+                    width="stretch",
                     key=f"{key_prefix}_tel_editor",
                 )
             
@@ -281,7 +281,7 @@ def context_widget(
             comp_edited = st.data_editor(
                 pd.DataFrame(comp_data) if comp_data else pd.DataFrame(columns=["Name", "Contrast", "Separation (mas)", "PA (deg)"]),
                 num_rows="dynamic",
-                use_container_width=True,
+                width="stretch",
                 key=f"{key_prefix}_comp_editor",
             )
 
@@ -446,7 +446,7 @@ def simple_context_selector(
         )
 
     with top_cols[3]:
-        if st.button("Load", key=f"{key_prefix}_load", use_container_width=True):
+        if st.button("Load", key=f"{key_prefix}_load", width="stretch"):
             st.session_state[ctx_key] = copy(presets[selected_preset])
             st.rerun()
 

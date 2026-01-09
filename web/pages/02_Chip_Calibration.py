@@ -53,6 +53,61 @@ Both methods aim to retrieve the ideal phase shifter settings (φ₁, ..., φ₁
 compensate for unknown phase aberrations (σ₁, ..., σ₁₄).
 """)
 
+# Information sections
+with st.expander("ℹ️ Trial & Error Details", expanded=False):
+    st.subheader("Trial & Error")
+    st.markdown(r"""
+    In order to get the best shifts to inject to optimize the component performances, I made a genetic algorithme that iteratively mutate a shifter and keep the mutation if it minimize the associated metric. All the shifters that act on the bright channel are associated with the bright metric that must be maximized
+    
+    $$
+    M_B = |B|^2
+    $$
+    
+    While the other shifters are associated with the kernel metric that must be minimized.
+    
+    $$
+    M_K = \sum_{n=1}^3|K_n|
+    $$
+    
+    Merging these two metrics can induce local minimum since improving the bright metric can deterior the kernel metric. This separation is then necessary to ensure reaching a global minimum (empirically demonstrated)
+    """)
+
+with st.expander("ℹ️ Obstruction Approach Details", expanded=False):
+    st.subheader("Obstruction")
+    st.markdown(r"""
+    En obstruant successivement une paire d'entrées, il est possible de simplifier le problème d'optimisation en ne jouant que sur un seul paramètre et en ne regardant qu'une seule sortie.
+    
+    Il existe différentes façon de procéder. Je ne vais détailler ici que l'une d'entre elles.
+    
+    On commence par obstruer les entrées $I_2$ et $I_3$. Au regard de l'architectue de notre composant, on peut alors décrire la fonction de transfert pour la sortie brillante $B$
+    
+    $$
+    B = \left|\left(a_1 e^{i(\theta_1 + \sigma_1 + \phi_1)} + a_2 e^{i(\theta_2 + \sigma_2 + \phi_2)}\right) e^{i(\sigma_5 + \phi_5)}\right|^2
+    $$
+    
+    Où $a_n$ et $\theta_n$ représentent respectivement l'amplitude et la phase des signaux d'entrée. $\sigma_n$ correspond à la perturbation de phase (inconnue) associé au retardateur $n$ et $\phi_n$ est la phase que l'on inject volontairement via le retardateur pour tenter de compenser cette perturbation.
+    
+    La calibration se faisant en laboatoire, on peut supposer une intensité totale fixée à $1$ (unité arbitraire) et que chaque entrée recçoi le même flux soit $a_1 = a_2 = 1/\sqrt{2}$, et parfaitement cophasé, soit $\theta_1 = \theta_2 = \theta$. Etant donné que l'on a accès qu'a l'intensité du signal, nous sommes insensible à la phase globale, ce qui permet de simplifier l'équation précédente :
+    
+    $$
+    B = \frac{1}{2} \left|e^{i(\sigma_1 + \phi_1)} + e^{i(\sigma_2 + \phi_2)}\right|^2
+    $$
+    
+    En maximisant $B$, on devrait alors trouver $1$ ce qui implique que
+    
+    $$
+    \sigma_1 + \phi_1 = \sigma_2 + \phi_2
+    $$
+    
+    On peut utiliser $\phi_1$ comme référence (phase globale) et ainsi le fixer à 0, ce qui donne alors
+    
+    $$
+    \phi_2 = \sigma_1 - \sigma_2
+    $$
+    
+    On peut alors soit effectuer différentes mesures de $B$ à $\phi_2$ fixé et en déduire $\sigma_1$ et $\sigma_2$ par résolution d'un système déquation, soit trouver dichotomiquement la valeur de $\phi_2$ qui maximise $B$.
+    """)
+
 st.divider()
 
 # =======================
@@ -191,7 +246,7 @@ with right_col:
                 if trial_path.exists():
                     st.image(
                         str(trial_path),
-                        use_container_width=True,
+                        width="stretch",
                         caption="Trial & Error Calibration (Genetic Algorithm)",
                     )
                 else:
@@ -211,7 +266,7 @@ with right_col:
                 if obstruction_path.exists():
                     st.image(
                         str(obstruction_path),
-                        use_container_width=True,
+                        width="stretch",
                         caption="Obstruction Calibration",
                     )
                 else:
@@ -279,61 +334,11 @@ try:
     tbl_cols = st.columns(2)
     with tbl_cols[0]:
         st.caption("Before calibration")
-        st.dataframe(df_pre.style.format({"Mean": "{:.3e}", "Median": "{:.3e}", "Std": "{:.3e}"}), use_container_width=True)
+        st.dataframe(df_pre.style.format({"Mean": "{:.3e}", "Median": "{:.3e}", "Std": "{:.3e}"}), width="stretch")
     with tbl_cols[1]:
         st.caption("After calibration")
-        st.dataframe(df_post.style.format({"Mean": "{:.3e}", "Median": "{:.3e}", "Std": "{:.3e}"}), use_container_width=True)
+        st.dataframe(df_post.style.format({"Mean": "{:.3e}", "Median": "{:.3e}", "Std": "{:.3e}"}), width="stretch")
 
 except Exception as e:
     st.error(f"❌ Error computing statistics: {e}")
     st.info("Ensure the context observation pipeline is available.")
-
-st.divider()
-
-# Information sections
-with st.expander("ℹ️ Calibration Methods", expanded=False):
-    st.subheader("Trial & Error (Genetic Algorithm)")
-    st.markdown("""
-    **Principle**: Evolves a population of phase shifter solutions across multiple generations
-    to maximize the kernel null depth (minimize the bright output).
-    
-    **Advantages**:
-    - Handles all 14 parameters simultaneously
-    - Finds global optima efficiently
-    - Works with complex phase landscapes
-    
-    **Disadvantages**:
-    - Requires many forward model evaluations
-    - Stochastic (results vary slightly)
-    - Slower than targeted approaches
-    """)
-    
-    st.subheader("Obstruction Approach")
-    st.markdown("""
-    **Principle**: Sequentially obstructs pairs of inputs to decouple the problem. For each pair,
-    optimize one phase shifter parameter to maximize the output brightness, revealing the
-    underlying aberrations.
-    
-    **Advantages**:
-    - Fast sequential calibration (linear in number of pairs)
-    - Deterministic and robust
-    - Low computational cost
-    
-    **Disadvantages**:
-    - Only handles 2-input pairs at a time
-    - Requires multiple measurement rounds
-    - Sensitivity to measurement noise
-    """)
-
-with st.expander("📚 References", expanded=False):
-    st.markdown("""
-    1. **Genetic Algorithms for Phase Optimization**: 
-       Goldberg, D.E. (1989). *Genetic Algorithms in Search, Optimization, and Machine Learning*.
-    
-    2. **Modal Decomposition and Phase Retrieval**:
-       Malbet, F. et al. (1998). Stellar interferometry with phase closure.
-       *A&A Reviews* 8(3-4): 355-389.
-    
-    3. **Testbed Demonstration** (PHOTONICS project):
-       See thesis Chapters 4-5 for laboratory validation results.
-    """)
