@@ -101,12 +101,29 @@ presets = {
     "VLTI": Context.get_VLTI(),
     "LIFE": Context.get_LIFE(),
 }
+
+def setup_context(c: Context) -> Context:
+    """
+    Apply default settings for On-Sky Contribution analysis.
+    - Monochromatic: True (faster)
+    - Zero phase errors (ideal)
+    """
+    c.monochromatic = True
+    c.interferometer.chip.φ = np.zeros(14) * u.nm
+    c.interferometer.chip.σ = np.zeros(14) * u.nm
+    c.Γ = 10 * u.nm
+    if c.target.companions:
+        c.target.companions[0].c = 1e-2
+    c.Δh = 24 * u.hourangle
+    return c
+
 ctx = context_widget(
     key_prefix="os_contrib",
     presets=presets,
     default_preset="VLTI",
     expanded=True,
     show_advanced=True,
+    post_load_func=setup_context,
 )
 
 st.divider()
@@ -118,7 +135,7 @@ col1, col2 = st.columns(2)
 
 with col1:
     resolution = st.slider("Map Resolution (pixels)", 20, 200, 100, step=10, help="Higher resolution is slower but more detailed.")
-    samples_per_ha = st.number_input("Samples per Hour Angle", value=50, min_value=10, help="Number of time steps for the simulation.")
+    samples_per_ha = st.number_input("Samples per Hour Angle", value=60, min_value=10, help="Number of time steps for the simulation.")
 
 with col2:
     st.info("The simulation uses the parameters defined in the Context Configuration above.")

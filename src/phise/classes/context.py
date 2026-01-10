@@ -840,7 +840,7 @@ class Context:
             h = 0 * u.hourangle, # Central hour angle
             Δh = 8 * u.hourangle, # Hour angle range
             Γ = 100 * u.nm, # Input cophasing error (RMS)
-            monochromatic=False,
+            monochromatic=True,
             name="Default Context", # Context name
             interferometer = Interferometer(
                 l = -24.6275 * u.deg, # Latitude
@@ -867,7 +867,7 @@ class Context:
                 name = "Vega", # Target name
                 companions = [
                     Companion(
-                        c = 1e-6, # Companion contrast
+                        c = 1e-2, # Companion contrast
                         ρ = 4 * u.mas, # Companion angular separation
                         θ = 0 * u.deg, # Companion position angle
                         name = "Hypothetical Companion", # Companion name
@@ -895,6 +895,11 @@ class Context:
         λ = 1.55 * u.um # Central wavelength
 
         ctx = Context(
+            h = 0 * u.hourangle, # Central hour angle
+            Δh = 24 * u.hourangle, # Hour angle range
+            Γ = 1 * u.nm, # Input cophasing error (RMS)
+            name="Default Context", # Context name
+            monochromatic=True,
             interferometer = Interferometer(
                 l = -90 * u.deg, # Latitude
                 λ = λ, # Central wavelength
@@ -927,10 +932,6 @@ class Context:
                     ),
                 ],
             ),
-            h = 0 * u.hourangle, # Central hour angle
-            Δh = 24 * u.hourangle, # Hour angle range
-            Γ = 1 * u.nm, # Input cophasing error (RMS)
-            name="Default Context", # Context name
         )
 
         return ctx

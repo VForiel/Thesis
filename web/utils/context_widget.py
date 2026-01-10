@@ -7,7 +7,7 @@ and full parameter configuration.
 
 from pathlib import Path
 import sys
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Callable
 from copy import deepcopy as copy
 
 import numpy as np
@@ -31,6 +31,7 @@ def context_widget(
     default_preset: str = "VLTI",
     expanded: bool = False,
     show_advanced: bool = True,
+    post_load_func: Optional[Callable[[Context], Context]] = None,
 ) -> Context:
     """
     Render a full context configurator widget with all parameters.
@@ -41,6 +42,7 @@ def context_widget(
         default_preset: Name of the default preset to load initially.
         expanded: Whether the expander should be open by default.
         show_advanced: Show advanced chip/camera/telescope settings.
+        post_load_func: Optional function to modify the context after loading a preset.
 
     Returns:
         Context: Fully configured context object.
@@ -53,10 +55,17 @@ def context_widget(
             "LIFE": Context.get_LIFE(),
         }
 
+    def load_preset_logic(preset_name: str) -> Context:
+        """Helper to load and modify a preset."""
+        c = copy(presets.get(preset_name, Context.get_VLTI()))
+        if post_load_func is not None:
+            c = post_load_func(c)
+        return c
+
     # Session state key
     ctx_key = f"{key_prefix}_context"
     if ctx_key not in st.session_state:
-        st.session_state[ctx_key] = copy(presets.get(default_preset, Context.get_VLTI()))
+        st.session_state[ctx_key] = load_preset_logic(default_preset)
 
     with st.expander("⚙️ Context Configuration", expanded=expanded):
         # Preset selector
@@ -70,11 +79,11 @@ def context_widget(
             )
         with preset_cols[1]:
             if st.button("Load Preset", key=f"{key_prefix}_load", width="stretch"):
-                st.session_state[ctx_key] = copy(presets[selected_preset])
+                st.session_state[ctx_key] = load_preset_logic(selected_preset)
                 st.rerun()
         with preset_cols[2]:
             if st.button("Reset to Default", key=f"{key_prefix}_reset", width="stretch"):
-                st.session_state[ctx_key] = copy(presets[default_preset])
+                st.session_state[ctx_key] = load_preset_logic(default_preset)
                 st.rerun()
 
         ctx = copy(st.session_state[ctx_key])
