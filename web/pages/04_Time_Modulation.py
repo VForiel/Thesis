@@ -58,7 +58,10 @@ base_ctx = context_widget(
     show_advanced=True
 )
 
-
+# Force ideal component parameters (φ=0, σ=0) for this simulation
+base_ctx.interferometer.chip.φ = np.zeros(14) * u.nm
+base_ctx.interferometer.chip.σ = np.zeros(14) * u.nm
+st.info("ℹ️ **Simulation Note:** The photonic component is forced to be **ideal** (no phase errors, no manufacturing defects) for this demonstration.")
 
 # Allow overriding companions locally for the demo logic if needed
 col_params1, col_params2 = st.columns(2)

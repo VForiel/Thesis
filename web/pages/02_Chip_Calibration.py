@@ -14,16 +14,17 @@ import numpy as np
 import astropy.units as u
 from copy import deepcopy as copy
 
+# --- Path Setup ---
 ROOT = Path(__file__).parent.parent.parent
-SRC = ROOT / "src"
 # Ensure project root is on path so `src` is importable
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from phise import Context
+WEB = ROOT / "web"
+if str(WEB) not in sys.path:
+    sys.path.insert(0, str(WEB))
 
-# Import context widget and analysis modules
-sys.path.insert(0, str(ROOT / "web"))
+from phise import Context
 from utils.context_widget import context_widget
 from src import analysis
 
@@ -75,37 +76,37 @@ with st.expander("ℹ️ Trial & Error Details", expanded=False):
 with st.expander("ℹ️ Obstruction Approach Details", expanded=False):
     st.subheader("Obstruction")
     st.markdown(r"""
-    En obstruant successivement une paire d'entrées, il est possible de simplifier le problème d'optimisation en ne jouant que sur un seul paramètre et en ne regardant qu'une seule sortie.
+    By successively obstructing inputs, it is possible to simplify the optimization problem by adjusting only a single parameter and monitoring only a single output.
     
-    Il existe différentes façon de procéder. Je ne vais détailler ici que l'une d'entre elles.
+    There are different ways to proceed. Only one is detailed here.
     
-    On commence par obstruer les entrées $I_2$ et $I_3$. Au regard de l'architectue de notre composant, on peut alors décrire la fonction de transfert pour la sortie brillante $B$
+    We start by obstructing inputs $I_2$ and $I_3$. Considering the architecture of our component, we can then describe the transfer function for the bright output $B$:
     
     $$
     B = \left|\left(a_1 e^{i(\theta_1 + \sigma_1 + \phi_1)} + a_2 e^{i(\theta_2 + \sigma_2 + \phi_2)}\right) e^{i(\sigma_5 + \phi_5)}\right|^2
     $$
     
-    Où $a_n$ et $\theta_n$ représentent respectivement l'amplitude et la phase des signaux d'entrée. $\sigma_n$ correspond à la perturbation de phase (inconnue) associé au retardateur $n$ et $\phi_n$ est la phase que l'on inject volontairement via le retardateur pour tenter de compenser cette perturbation.
+    Where $a_n$ and $\theta_n$ represent the amplitude and phase of the input signals, respectively. $\sigma_n$ corresponds to the (unknown) phase perturbation associated with retarder $n$, and $\phi_n$ is the phase voluntarily injected via the retarder to attempt to compensate for this perturbation.
     
-    La calibration se faisant en laboatoire, on peut supposer une intensité totale fixée à $1$ (unité arbitraire) et que chaque entrée recçoi le même flux soit $a_1 = a_2 = 1/\sqrt{2}$, et parfaitement cophasé, soit $\theta_1 = \theta_2 = \theta$. Etant donné que l'on a accès qu'a l'intensité du signal, nous sommes insensible à la phase globale, ce qui permet de simplifier l'équation précédente :
+    As calibration is performed in the laboratory, we can assume a total intensity fixed at $1$ (arbitrary unit) and that each input receives the same flux, i.e. $a_1 = a_2 = 1/\sqrt{2}$, and is perfectly co-phased, i.e. $\theta_1 = \theta_2 = \theta$. Since we only have access to the signal intensity, we are insensitive to the global phase, allowing us to simplify the previous equation:
     
     $$
     B = \frac{1}{2} \left|e^{i(\sigma_1 + \phi_1)} + e^{i(\sigma_2 + \phi_2)}\right|^2
     $$
     
-    En maximisant $B$, on devrait alors trouver $1$ ce qui implique que
+    By maximizing $B$, we should find $1$, which implies that:
     
     $$
     \sigma_1 + \phi_1 = \sigma_2 + \phi_2
     $$
     
-    On peut utiliser $\phi_1$ comme référence (phase globale) et ainsi le fixer à 0, ce qui donne alors
+    We can use $\phi_1$ as a reference (global phase) and thus fix it to 0, which yields:
     
     $$
     \phi_2 = \sigma_1 - \sigma_2
     $$
     
-    On peut alors soit effectuer différentes mesures de $B$ à $\phi_2$ fixé et en déduire $\sigma_1$ et $\sigma_2$ par résolution d'un système déquation, soit trouver dichotomiquement la valeur de $\phi_2$ qui maximise $B$.
+    We can then either perform different measurements of $B$ at fixed $\phi_2$ and deduce $\sigma_1$ and $\sigma_2$ by solving a system of equations, or dichotomously find the value of $\phi_2$ that maximizes $B$.
     """)
 
 st.divider()

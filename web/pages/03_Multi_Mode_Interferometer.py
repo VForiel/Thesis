@@ -15,14 +15,14 @@ from pathlib import Path
 import streamlit as st
 import numpy as np
 import matplotlib.pyplot as plt
-
-# Setup path
-ROOT = Path(__file__).parent.parent.parent
-SRC = ROOT / "src"
-if SRC.exists() and str(SRC) not in sys.path:
-    sys.path.insert(0, str(SRC))
-
 import importlib
+
+# --- Path Setup ---
+ROOT = Path(__file__).parent.parent.parent
+# Ensure project root is on path so `src` is importable
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
 import phise.modules.mmi as mmi_module
 
 # Ensure latest version of the plotting helpers (Streamlit keeps modules cached)
@@ -34,7 +34,6 @@ from phise.modules.mmi import (
     calibrate_n_core_and_phases,
     plot_mmi_interactive,
 )
-
 
 def render_calibration_result(result: dict):
     """Render calibration metrics and phase evolution plot."""
@@ -126,42 +125,42 @@ st.divider()
 # MMI CONFIGURATION
 # =======================
 
-st.markdown("## Configuration du MMI")
+st.markdown("## MMI Configuration")
 
 col_geom1, col_geom2 = st.columns(2)
 
 with col_geom1:
-    st.subheader("Géométrie")
-    N = st.number_input("Entrées (N)", 1, 8, 4)
-    M = st.number_input("Sorties (M)", 1, 8, 4)
-    W_um = st.number_input("Largeur W (µm)", value=20.0, min_value=1.0, max_value=100.0, step=0.5)
+    st.subheader("Geometry")
+    N = st.number_input("Inputs (N)", 1, 8, 4)
+    M = st.number_input("Outputs (M)", 1, 8, 4)
+    W_um = st.number_input("Width W (µm)", value=20.0, min_value=1.0, max_value=100.0, step=0.5)
     W = W_um * 1e-6
-    L_um = st.number_input("Longueur L (µm) — 0 = auto", value=440.0, min_value=0.0, step=10.0)
+    L_um = st.number_input("Length L (µm) — 0 = auto", value=440.0, min_value=0.0, step=10.0)
     L = (L_um * 1e-6) if L_um > 0 else None
 
 with col_geom2:
-    st.subheader("Optique")
-    wavelength_um = st.number_input("Longueur d'onde λ (µm)", value=1.55, min_value=0.4, max_value=4.0, step=0.01, format="%.2f")
+    st.subheader("Optics")
+    wavelength_um = st.number_input("Wavelength λ (µm)", value=1.55, min_value=0.4, max_value=4.0, step=0.01, format="%.2f")
     wavelength = wavelength_um * 1e-6
-    n_core = st.number_input("Indice de cœur (n_core)", min_value=1.0, max_value=4.0, value=float(st.session_state.get("n_core_override", 2.0458)), format="%.4f")
-    delta_n = st.number_input("Contraste d'indice (Δn)", 0.001, 1.0, 0.1, format="%.4f")
+    n_core = st.number_input("Core Index (n_core)", min_value=1.0, max_value=4.0, value=float(st.session_state.get("n_core_override", 2.0458)), format="%.4f")
+    delta_n = st.number_input("Index Contrast (Δn)", 0.001, 1.0, 0.1, format="%.4f")
 
 col_num1, col_num2 = st.columns([1,2])
 with col_num1:
-    st.subheader("Numérique")
+    st.subheader("Numerical")
 
 
-    num_modes = st.number_input("Nombre de modes", value=200, min_value=10, max_value=200, step=1)
+    num_modes = st.number_input("Number of modes", value=200, min_value=10, max_value=200, step=1)
 
-    z_mode = st.radio("Mode de résolution z", ["Nombre de pixels", "Résolution (µm)"])
+    z_mode = st.radio("Z-resolution mode", ["Number of pixels", "Resolution (µm)"])
     
-    if z_mode == "Résolution (µm)":
-        z_resolution_um = st.number_input("Résolution z (µm) — 0 = auto", value=0.0, min_value=0.0, step=0.01, format="%.3f")
+    if z_mode == "Resolution (µm)":
+        z_resolution_um = st.number_input("Z-resolution (µm) — 0 = auto", value=0.0, min_value=0.0, step=0.01, format="%.3f")
         z_resolution = (z_resolution_um * 1e-6) if z_resolution_um > 0 else None
     else:
         # Calculate effective L for display
         L_display = L if L is not None else 0.0
-        num_z_pixels = st.number_input("Nombre de pixels en z", value=500, min_value=10, max_value=10000, step=100)
+        num_z_pixels = st.number_input("Number of Z pixels", value=500, min_value=10, max_value=10000, step=100)
         # Calculate z_resolution from L and num_pixels
         if L is not None and L > 0:
             z_resolution = L / num_z_pixels
@@ -169,24 +168,24 @@ with col_num1:
             z_resolution = None  # Will be auto-calculated with default L
 
 with col_num2:
-    st.subheader("Guides d'onde")
+    st.subheader("Waveguides")
 
     col_guides1, col_guides2 = st.columns(2)
 
     with col_guides1:
-        st.write("**Entrées**")
-        Din_um = st.number_input("Espacement Din (µm) — 0 = auto", value=5.0, min_value=0.0, max_value=50.0, step=0.5)
+        st.write("**Inputs**")
+        Din_um = st.number_input("Spacing Din (µm) — 0 = auto", value=5.0, min_value=0.0, max_value=50.0, step=0.5)
         Din = (Din_um * 1e-6) if Din_um > 0 else None
         
-        Sin_um = st.number_input("Largeur Sin (µm) — 0 = auto", value=4.5, min_value=0.0, max_value=10.0, step=0.1)
+        Sin_um = st.number_input("Width Sin (µm) — 0 = auto", value=4.5, min_value=0.0, max_value=10.0, step=0.1)
         Sin = (Sin_um * 1e-6) if Sin_um > 0 else None
 
     with col_guides2:
-        st.write("**Sorties**")
-        Dout_um = st.number_input("Espacement Dout (µm) — 0 = auto", value=5.0, min_value=0.0, max_value=50.0, step=0.5)
+        st.write("**Outputs**")
+        Dout_um = st.number_input("Spacing Dout (µm) — 0 = auto", value=5.0, min_value=0.0, max_value=50.0, step=0.5)
         Dout = (Dout_um * 1e-6) if Dout_um > 0 else None
         
-        Sout_um = st.number_input("Largeur Sout (µm) — 0 = auto", value=4.5, min_value=0.0, max_value=10.0, step=0.1)
+        Sout_um = st.number_input("Width Sout (µm) — 0 = auto", value=4.5, min_value=0.0, max_value=10.0, step=0.1)
         Sout = (Sout_um * 1e-6) if Sout_um > 0 else None
 
     bright_idx = st.number_input("Bright output index", min_value=0, max_value=max(0, int(M)-1), value=0, step=1)
@@ -197,7 +196,7 @@ st.divider()
 # INPUT CONFIGURATION
 # =======================
 
-st.markdown("## Configuration des entrées")
+st.markdown("## Input Configuration")
 
 st.subheader("Amplitudes & Phases")
 

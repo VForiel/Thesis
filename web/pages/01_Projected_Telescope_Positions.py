@@ -14,18 +14,19 @@ import numpy as np
 import astropy.units as u
 from copy import deepcopy as copy
 
+# --- Path Setup ---
 ROOT = Path(__file__).parent.parent.parent
+# Add src to path for phise
 SRC = ROOT / "src"
 if SRC.exists() and str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-from phise import Context
+# Add web to path for utils
+WEB = ROOT / "web"
+if str(WEB) not in sys.path:
+    sys.path.insert(0, str(WEB))
 
-# Import context widget
-import sys
-from pathlib import Path
-ROOT = Path(__file__).parent.parent.parent
-sys.path.insert(0, str(ROOT / "web"))
+from phise import Context
 from utils.context_widget import context_widget
 
 st.set_page_config(

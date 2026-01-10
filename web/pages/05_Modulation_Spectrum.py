@@ -55,6 +55,11 @@ base_ctx = context_widget(
     show_advanced=True
 )
 
+# Force ideal component parameters (φ=0, σ=0) for this simulation
+base_ctx.interferometer.chip.φ = np.zeros(14) * u.nm
+base_ctx.interferometer.chip.σ = np.zeros(14) * u.nm
+st.info("ℹ️ **Simulation Note:** The photonic component is forced to be **ideal** (no phase errors, no manufacturing defects) for this demonstration.")
+
 st.divider()
 
 # --- Simulation Controls (Main Layout) ---
@@ -78,6 +83,7 @@ with col_sim2:
     st.markdown("**Noise & Observation**")
     gamma_nm = st.slider("Atmospheric Piston RMS (nm)", 0.0, 100.0, 10.0, 1.0, help="Piston noise (Gamma)")
     delta_h = st.slider("Observation Duration (Δh)", 1, 24, 6, 1, help="Period over which kernels are optimized/valid.")
+    k_idx = st.selectbox("Kernel Index", options=[0, 1, 2], index=0, format_func=lambda x: f"Kernel {x+1}", help="Index of the kernel output to analyze.")
     
     st.caption("The simulation generates a time series based on the selected context, then computes its periodogram.")
 
@@ -159,7 +165,6 @@ def run_simulation_logic(ctx_input, _gamma, _delta_h, _duration, is_ideal=False)
 
 # --- Run Simulations & Collect Results ---
 results = {} # Key: signal_name, Value: (h, sig_ideal, sig_obs, psd_ideal, psd_obs, freqs)
-k_idx = 0 # Analyze first kernel
 
 fs_hz_global = None # Just to reuse common freq axis if needed
 
@@ -177,8 +182,16 @@ for signal_name in selected_signals:
     fs_hz_global = fs_hz
     
     # 4. Process Spectrum
-    s_ideal = f_ideal[:, k_idx]
-    s_obs = f_obs[:, k_idx]
+    # Safety check for kernel index
+    n_kernels = f_ideal.shape[1]
+    if k_idx >= n_kernels:
+        st.warning(f"Selected Kernel Index {k_idx} is out of bounds (Max: {n_kernels-1}). Showing Index 0.")
+        valid_k_idx = 0
+    else:
+        valid_k_idx = k_idx
+
+    s_ideal = f_ideal[:, valid_k_idx]
+    s_obs = f_obs[:, valid_k_idx]
     
     results[signal_name] = {
         "h": h_arr,
