@@ -67,13 +67,6 @@ st.markdown(
     - **Key questions**: uv-coverage, null depth stability, throughput vs. bandwidth, sensitivity to phase errors.
     - **Methodology**: Start from observation contexts (telescope geometry, wavelength band, target), propagate through photonic chip, analyze null outputs and kernel combinations.
 
-    ## What you can do here
-    - Configure **base contexts** (VLTI, LIFE) and override scenario-specific parameters.
-    - Explore **projected telescope positions / uv-coverage** versus latitude, declination, hour angle, Δh.
-    - Inspect **transmission maps** and kernel outputs for different chips and bandwidths.
-    - Probe **phase noise and cophasing requirements** by varying Γ and observing stability impacts.
-    - Run **scenario simulations** tied to thesis chapters (e.g., contrast limits, throughput trade-offs).
-
     ## How to navigate the pages
     - **Base context dropdown**: collapsed by default; defines the starting interferometer/target/camera.
     - **Visible page controls**: override only the parameters relevant to the current visualization or test.

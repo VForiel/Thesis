@@ -539,35 +539,6 @@ if st.session_state.get("show_ncore") and st.session_state.get("ncore_result"):
 
 st.divider()
 
-with st.expander("📚 Theory & References", expanded=False):
-    st.markdown("""
-    ### Eigenmode Expansion (EME)
-    
-    The MMI simulation uses **Eigenmode Expansion** to track field evolution:
-    
-    1. **Mode Decomposition**: Input field projected onto eigenmodes of the slab waveguide
-    2. **Propagation**: Each mode evolves as exp(-iβ_m z)
-    3. **Reconstruction**: Field superposition at output plane
-    
-    This approach is:
-    - ✓ Physically accurate (includes all guided and evanescent modes)
-    - ✓ Computationally efficient (linear in L)
-    - ✓ General (works for any N×M configuration)
-    
-    ### Physical Insights
-    
-    - **Self-imaging**: At specific lengths, all inputs interfere constructively at one output
-    - **Power conservation**: Total power is conserved (∑|out|² = ∑|in|²)
-    - **Modal dispersion**: Different modes have different propagation constants
-    - **Evanescent coupling**: Field penetrates outside core region
-    
-    ### References
-    
-    1. **Soref et al. (1991)** - Silicon waveguide FIR filters
-    2. **Snyder & Love (2012)** - Optical Waveguide Theory
-    3. **Trutschel & Golub (2002)** - Active integrated optical switches
-    """)
-
 with st.expander("ℹ️ About This Tool", expanded=False):
     st.markdown("""
     This MMI simulator is part of **PHISE** (PHotonic Interferometry Simulation for Exoplanets),
@@ -583,32 +554,5 @@ with st.expander("ℹ️ About This Tool", expanded=False):
     - Phase calibration for nulling
     - Interactive visualization
     
-    **For more information:** Visit the PHISE documentation
-    """)
-
-with st.expander("⚙️ Parameters Guide", expanded=False):
-    st.markdown("""
-    #### Geometry
-    
-    - **N inputs / M outputs**: Number of input/output ports
-    - **W (width)**: MMI transverse dimension [µm]
-    - **L (length)**: MMI propagation dimension [µm]
-      - If L=0 (auto): Calculated for paired interference mode
-      - L_pi = 4 × n_eff × W² / (3 × λ)
-    
-    #### Material
-    
-    - **λ (wavelength)**: Operating wavelength [µm]
-    - **n_core**: Refractive index of waveguide core
-    - **Δn (index contrast)**: n_core - n_clad
-      - Typical values: 0.08-0.15 for silicon photonics
-    
-    #### Numerical
-    
-    - **num_modes**: Eigenmode decomposition order
-      - Higher = more accurate but slower
-      - ~50 sufficient for most cases
-    - **z-resolution**: Spatial step for propagation
-      - Auto: λ/30 (good default)
-      - Smaller = more accurate but more memory
+    **For more information:** Visit the [HELIOS documentation](https://helios-project.readthedocs.io/en/latest/api/sim/mmi.html)
     """)
