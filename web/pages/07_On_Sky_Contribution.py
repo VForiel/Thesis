@@ -117,13 +117,22 @@ def setup_context(c: Context) -> Context:
     c.Δh = 24 * u.hourangle
     return c
 
+# Manual initialization to avoid post_load_func compatibility issues
+key_prefix = "os_contrib"
+ctx_key = f"{key_prefix}_context"
+
+if ctx_key not in st.session_state:
+    # Default init
+    c = copy(presets["VLTI"])
+    c = setup_context(c)
+    st.session_state[ctx_key] = c
+
 ctx = context_widget(
-    key_prefix="os_contrib",
+    key_prefix=key_prefix,
     presets=presets,
     default_preset="VLTI",
     expanded=True,
     show_advanced=True,
-    post_load_func=setup_context,
 )
 
 st.divider()
