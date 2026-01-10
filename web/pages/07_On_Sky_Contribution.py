@@ -122,7 +122,7 @@ default_ctx = copy(presets["VLTI"])
 default_ctx = setup_context(default_ctx)
 
 ctx = context_widget(
-    key_prefix=key_prefix,
+    key_prefix="os_contrib",
     presets=presets,
     default_preset="VLTI",
     expanded=True,
