@@ -80,12 +80,12 @@ def context_widget(
         ctx = copy(st.session_state[ctx_key])
 
         # Tabs for different configuration sections
-        tabs = st.tabs(["📍 Observation", "🔭 Interferometer", "🎯 Target", "💾 Advanced"])
+        tabs = st.tabs(["📍 Observation", "🔭 Interferometer", "✨ Kernel-Nuller", "📷 Camera", "🎯 Target"])
         
         # ===== TAB 1: Observation Parameters =====
         with tabs[0]:
             st.caption("Observation Settings")
-            obs_cols = st.columns(3)
+            obs_cols = st.columns(2)
             
             with obs_cols[0]:
                 ctx_name = st.text_input("Context name", value=ctx.name, key=f"{key_prefix}_ctx_name")
@@ -115,19 +115,10 @@ def context_widget(
                     step=1.0,
                     key=f"{key_prefix}_gamma",
                 )
-            
-            with obs_cols[2]:
                 mono = st.checkbox(
                     "Monochromatic approximation",
                     value=ctx.monochromatic,
                     key=f"{key_prefix}_mono",
-                )
-                exp_minutes = st.number_input(
-                    "Exposure time (min)",
-                    min_value=0.01,
-                    value=float(ctx.interferometer.camera.e.to(u.min).value),
-                    step=0.1,
-                    key=f"{key_prefix}_exp",
                 )
 
         # ===== TAB 2: Interferometer =====
@@ -197,46 +188,71 @@ def context_widget(
                 ]
                 edited_tel = st.data_editor(
                     pd.DataFrame(tel_data),
-                    num_rows="dynamic",
                     width="stretch",
                     key=f"{key_prefix}_tel_editor",
                 )
             
-            # Chip configuration
-            if show_advanced:
-                st.divider()
-                st.caption("Photonic Chip (SuperKN)")
-                chip_cols = st.columns(3)
-                with chip_cols[0]:
-                    lambda0_val = st.number_input(
-                        "Design wavelength λ₀ (µm)",
-                        min_value=0.2,
-                        max_value=20.0,
-                        value=float(ctx.interferometer.chip.λ0.to(u.um).value),
-                        step=0.01,
-                        key=f"{key_prefix}_lambda0",
-                    )
-                with chip_cols[1]:
-                    phi_mean = st.number_input(
-                        "Injected phase mean (nm)",
-                        min_value=-1000.0,
-                        max_value=1000.0,
-                        value=float(np.mean(ctx.interferometer.chip.φ.to(u.nm).value)),
-                        step=1.0,
-                        key=f"{key_prefix}_phi_mean",
-                    )
-                with chip_cols[2]:
-                    sigma_mean = st.number_input(
-                        "Manufacturing error std (nm)",
-                        min_value=0.0,
-                        max_value=100.0,
-                        value=float(np.std(ctx.interferometer.chip.σ.to(u.nm).value)),
-                        step=1.0,
-                        key=f"{key_prefix}_sigma_std",
-                    )
-
-        # ===== TAB 3: Target =====
+        # ===== TAB 3: Kernel-Nuller =====
         with tabs[2]:
+            st.caption("Photonic Component (SuperKN)")
+            
+            kn_cols = st.columns(3)
+            with kn_cols[0]:
+                lambda0_val = st.number_input(
+                    "Design wavelength λ₀ (µm)",
+                    min_value=0.2,
+                    max_value=20.0,
+                    value=float(ctx.interferometer.chip.λ0.to(u.um).value),
+                    step=0.01,
+                    key=f"{key_prefix}_lambda0",
+                )
+            with kn_cols[1]:
+                phi_mean = st.number_input(
+                    "Injected phase mean (nm)",
+                    min_value=-1000.0,
+                    max_value=1000.0,
+                    value=float(np.mean(ctx.interferometer.chip.φ.to(u.nm).value)),
+                    step=1.0,
+                    key=f"{key_prefix}_phi_mean",
+                )
+            with kn_cols[2]:
+                sigma_mean = st.number_input(
+                    "Manufacturing error std (nm)",
+                    min_value=0.0,
+                    max_value=100.0,
+                    value=float(np.std(ctx.interferometer.chip.σ.to(u.nm).value)),
+                    step=1.0,
+                    key=f"{key_prefix}_sigma_std",
+                )
+
+        # ===== TAB 4: Camera =====
+        with tabs[3]:
+            st.caption("Camera Settings")
+            
+            cam_cols = st.columns(2)
+            with cam_cols[0]:
+                camera_name = st.text_input(
+                    "Camera name",
+                    value=ctx.interferometer.camera.name,
+                    key=f"{key_prefix}_camera_name",
+                )
+                exp_minutes = st.number_input(
+                    "Exposure time (min)",
+                    min_value=0.01,
+                    value=float(ctx.interferometer.camera.e.to(u.min).value),
+                    step=0.1,
+                    key=f"{key_prefix}_exp",
+                )
+
+            with cam_cols[1]:
+                camera_ideal = st.checkbox(
+                    "Ideal (noise-free) camera",
+                    value=ctx.interferometer.camera.ideal,
+                    key=f"{key_prefix}_camera_ideal",
+                )
+
+        # ===== TAB 5: Target =====
+        with tabs[4]:
             st.caption("Target Configuration")
             
             # Target basic parameters
@@ -248,14 +264,60 @@ def context_widget(
                     key=f"{key_prefix}_target_name",
                 )
             with target_cols[1]:
-                target_flux = st.number_input(
-                    "Spectral flux f (W/m²/nm)",
-                    min_value=0.0,
-                    value=float(ctx.target.f.to(u.W / u.m**2 / u.nm).value),
-                    step=0.001,
-                    format="%.6f",
-                    key=f"{key_prefix}_target_flux",
+                flux_mode = st.selectbox(
+                    "Flux Input Unit",
+                    options=["Magnitude (AB)", "Flux Density (Jy)", "Irradiance (W/m²/nm)"],
+                    index=1, # Default to Jy as it is more common than raw SI for this field
+                    key=f"{key_prefix}_flux_mode",
                 )
+                
+                # Get current flux in various units for display/initialization
+                current_f = ctx.target.f
+                # Conversion logic
+                # W/m²/nm <-> Jy requires wavelength.
+                # 1 Jy = 10^-26 W/m^2/Hz
+                # f_lambda = f_nu * c / lambda^2
+                lam = ctx.interferometer.λ
+                
+                if flux_mode == "Magnitude (AB)":
+                    # Convert current f (W/m^2/nm) -> Jy -> ABmag
+                    f_jy = current_f.to(u.Jy, equivalencies=u.spectral_density(lam))
+                    current_mag = f_jy.to(u.ABmag).value
+                    
+                    mag_val = st.number_input(
+                        "Magnitude (AB)",
+                        value=float(current_mag),
+                        step=0.1,
+                        key=f"{key_prefix}_target_mag",
+                    )
+                    # Update ctx.target.f
+                    # Mag -> Jy -> W/m^2/nm
+                    new_flux_jy = (mag_val * u.ABmag).to(u.Jy)
+                    ctx.target.f = new_flux_jy.to(u.W / u.m**2 / u.nm, equivalencies=u.spectral_density(lam))
+                    
+                elif flux_mode == "Flux Density (Jy)":
+                    f_jy = current_f.to(u.Jy, equivalencies=u.spectral_density(lam)).value
+                    jy_val = st.number_input(
+                        "Flux Density (Jy)",
+                        min_value=0.0,
+                        value=float(f_jy),
+                        step=10.0,
+                        format="%.2f",
+                        key=f"{key_prefix}_target_jy",
+                    )
+                    # Jy -> W/m^2/nm
+                    ctx.target.f = (jy_val * u.Jy).to(u.W / u.m**2 / u.nm, equivalencies=u.spectral_density(lam))
+                    
+                else: # Irradiance
+                    exp_val = st.number_input(
+                        "Spectral Flux (W/m²/nm)",
+                        min_value=0.0,
+                        value=float(current_f.value),
+                        step=1e-15,
+                        format="%.2e", # Scientific notation
+                        key=f"{key_prefix}_target_flux",
+                    )
+                    ctx.target.f = exp_val * (u.W / u.m**2 / u.nm)
             with target_cols[2]:
                 target_dec = st.number_input(
                     "Declination δ (deg)",
@@ -280,32 +342,19 @@ def context_widget(
             ]
             comp_edited = st.data_editor(
                 pd.DataFrame(comp_data) if comp_data else pd.DataFrame(columns=["Name", "Contrast", "Separation (mas)", "PA (deg)"]),
+                column_config={
+                    "Contrast": st.column_config.NumberColumn(
+                        "Contrast",
+                        format="%.2e",
+                        min_value=0.0,
+                        max_value=1.0,
+                        step=1e-7,
+                    )
+                },
                 num_rows="dynamic",
                 width="stretch",
                 key=f"{key_prefix}_comp_editor",
             )
-
-        # ===== TAB 4: Advanced =====
-        with tabs[3]:
-            st.caption("Advanced Settings")
-            
-            adv_cols = st.columns(2)
-            with adv_cols[0]:
-                st.write("**Camera**")
-                camera_name = st.text_input(
-                    "Camera name",
-                    value=ctx.interferometer.camera.name,
-                    key=f"{key_prefix}_camera_name",
-                )
-                camera_ideal = st.checkbox(
-                    "Ideal (noise-free) camera",
-                    value=ctx.interferometer.camera.ideal,
-                    key=f"{key_prefix}_camera_ideal",
-                )
-            
-            with adv_cols[1]:
-                st.write("**Display**")
-                st.info("Context summary will be shown after building")
 
         # Build updated context
         try:
@@ -357,7 +406,7 @@ def context_widget(
 
             # Build target
             target = Target(
-                f=target_flux * (u.W / u.m**2 / u.nm),
+                f=ctx.target.f, # Use the updated flux from the UI block above
                 δ=target_dec * u.deg,
                 companions=companions,
                 name=target_name,
