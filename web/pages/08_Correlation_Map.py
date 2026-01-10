@@ -94,6 +94,10 @@ def setup_context(c: Context) -> Context:
     c.interferometer.chip.σ = np.zeros(14) * u.nm
     # Correlation often needs reasonable integration to have a signal, 
     # but here we simulate high SNR usually unless camera noise is added.
+    c.Γ = 10 * u.nm
+    if c.target.companions:
+        c.target.companions[0].c = 1e-2
+    c.Δh = 24 * u.hourangle
     return c
 
 # Prepare default context
