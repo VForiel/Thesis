@@ -31,7 +31,7 @@ st.markdown(
     """
 )
 
-st.info("Use the sidebar to open each analysis or visualization page.")
+st.info("👈 Use the sidebar to navigate into my work.")
 
 st.markdown(
     """

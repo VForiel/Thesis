@@ -393,13 +393,16 @@ class SuperKN(Chip):
         ψ = ψ.copy() # Safe copy
         ψ *= self.input_attenuation
         
-        # Check for batch processing
-        # If φ_val has batch dim (N, 14), output should use batch jit
-        # ψ might be (N, 4) or (4,)
+        is_phi_batch = (φ_val.ndim >= 2)
+        is_psi_batch = (ψ.ndim >= 2)
         
-        is_batch = (φ_val.ndim == 2)
-        
-        if is_batch:
+        if is_phi_batch or is_psi_batch:
+             if is_psi_batch and not is_phi_batch:
+                 n_batch = ψ.shape[0]
+                 φ_val = np.tile(φ_val, (n_batch, 1))
+                 if σ_val.ndim == 1:
+                     σ_val = np.tile(σ_val, (n_batch, 1))
+
              return get_output_fields_batch_jit(ψ=ψ, φ=φ_val, σ=σ_val, λ=λ.value, λ0=λ0, output_order=self.output_order)
          
         ψ *= np.exp(-1j * 2 * np.pi * self.input_opd.to(λ.unit).value / λ.value)
