@@ -96,21 +96,17 @@ def setup_context(c: Context) -> Context:
     # but here we simulate high SNR usually unless camera noise is added.
     return c
 
-# Manual initialization to avoid post_load_func compatibility issues
-key_prefix = "correl_map"
-ctx_key = f"{key_prefix}_context"
-
-if ctx_key not in st.session_state:
-    c = copy(presets["VLTI"])
-    c = setup_context(c)
-    st.session_state[ctx_key] = c
+# Prepare default context
+default_ctx = copy(presets["VLTI"])
+default_ctx = setup_context(default_ctx)
 
 ctx = context_widget(
-    key_prefix=key_prefix,
+    key_prefix="correl_map",
     presets=presets,
     default_preset="VLTI",
     expanded=True,
     show_advanced=True,
+    initial_context=default_ctx,
 )
 
 st.divider()

@@ -31,7 +31,7 @@ def context_widget(
     default_preset: str = "VLTI",
     expanded: bool = False,
     show_advanced: bool = True,
-    post_load_func: Optional[Callable[[Context], Context]] = None,
+    initial_context: Optional[Context] = None,
 ) -> Context:
     """
     Render a full context configurator widget with all parameters.
@@ -42,7 +42,7 @@ def context_widget(
         default_preset: Name of the default preset to load initially.
         expanded: Whether the expander should be open by default.
         show_advanced: Show advanced chip/camera/telescope settings.
-        post_load_func: Optional function to modify the context after loading a preset.
+        initial_context: Context object to use as default initialization.
 
     Returns:
         Context: Fully configured context object.
@@ -57,15 +57,15 @@ def context_widget(
 
     def load_preset_logic(preset_name: str) -> Context:
         """Helper to load and modify a preset."""
-        c = copy(presets.get(preset_name, Context.get_VLTI()))
-        if post_load_func is not None:
-            c = post_load_func(c)
-        return c
+        return copy(presets.get(preset_name, Context.get_VLTI()))
 
     # Session state key
     ctx_key = f"{key_prefix}_context"
     if ctx_key not in st.session_state:
-        st.session_state[ctx_key] = load_preset_logic(default_preset)
+        if initial_context is not None:
+            st.session_state[ctx_key] = copy(initial_context)
+        else:
+            st.session_state[ctx_key] = load_preset_logic(default_preset)
 
     with st.expander("⚙️ Context Configuration", expanded=expanded):
         # Preset selector
@@ -355,7 +355,7 @@ def context_widget(
                         format="%.2e",
                         min_value=0.0,
                         max_value=1.0,
-                        step=1e-7,
+                        step=1e-20,
                     )
                 },
                 num_rows="dynamic",
