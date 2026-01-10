@@ -347,15 +347,26 @@ def context_widget(
                 }
                 for c in ctx.target.companions
             ]
+            # Prepare DataFrame with explicit types
+            if comp_data:
+                df_comp = pd.DataFrame(comp_data)
+            else:
+                df_comp = pd.DataFrame(columns=["Name", "Contrast", "Separation (mas)", "PA (deg)"])
+            
+            # Ensure numeric columns are float
+            for col in ["Contrast", "Separation (mas)", "PA (deg)"]:
+                if col in df_comp.columns:
+                     df_comp[col] = df_comp[col].astype(float)
+
             comp_edited = st.data_editor(
-                pd.DataFrame(comp_data) if comp_data else pd.DataFrame(columns=["Name", "Contrast", "Separation (mas)", "PA (deg)"]),
+                df_comp,
                 column_config={
                     "Contrast": st.column_config.NumberColumn(
                         "Contrast",
                         format="%.2e",
                         min_value=0.0,
                         max_value=1.0,
-                        step=1e-20,
+                        # step=None # Allow free input
                     )
                 },
                 num_rows="dynamic",
