@@ -63,7 +63,7 @@ def context_widget(
         preset_cols = st.columns([2, 1, 1])
         with preset_cols[0]:
             selected_preset = st.selectbox(
-                "Preset Template",
+                "Preset",
                 options=list(presets.keys()),
                 index=list(presets.keys()).index(default_preset) if default_preset in presets else 0,
                 key=f"{key_prefix}_preset",
@@ -88,7 +88,8 @@ def context_widget(
             obs_cols = st.columns(2)
             
             with obs_cols[0]:
-                ctx_name = st.text_input("Context name", value=ctx.name, key=f"{key_prefix}_ctx_name")
+                # ctx_name removed
+
                 h_val = st.slider(
                     "Hour angle h (hours)",
                     min_value=-12.0,
@@ -96,6 +97,14 @@ def context_widget(
                     value=float(ctx.h.to(u.hourangle).value),
                     step=0.1,
                     key=f"{key_prefix}_h",
+                )
+                gamma_val = st.number_input(
+                    "Cophasing RMS Γ (nm)",
+                    min_value=0.0,
+                    max_value=1000.0,
+                    value=float(ctx.Γ.to(u.nm).value),
+                    step=1.0,
+                    key=f"{key_prefix}_gamma",
                 )
             
             with obs_cols[1]:
@@ -106,14 +115,6 @@ def context_widget(
                     value=float(ctx.Δh.to(u.hourangle).value),
                     step=0.1,
                     key=f"{key_prefix}_dh",
-                )
-                gamma_val = st.number_input(
-                    "Cophasing RMS Γ (nm)",
-                    min_value=0.0,
-                    max_value=1000.0,
-                    value=float(ctx.Γ.to(u.nm).value),
-                    step=1.0,
-                    key=f"{key_prefix}_gamma",
                 )
                 mono = st.checkbox(
                     "Monochromatic approximation",
@@ -231,11 +232,8 @@ def context_widget(
             
             cam_cols = st.columns(2)
             with cam_cols[0]:
-                camera_name = st.text_input(
-                    "Camera name",
-                    value=ctx.interferometer.camera.name,
-                    key=f"{key_prefix}_camera_name",
-                )
+                # camera_name removed
+
                 exp_minutes = st.number_input(
                     "Exposure time (min)",
                     min_value=0.01,
@@ -379,7 +377,7 @@ def context_widget(
                 chip = ctx.interferometer.chip
 
             # Build camera
-            camera = Camera(e=exp_minutes * u.min, ideal=camera_ideal, name=camera_name)
+            camera = Camera(e=exp_minutes * u.min, ideal=camera_ideal, name=ctx.interferometer.camera.name)
 
             # Build interferometer
             interferometer = Interferometer(
@@ -420,7 +418,7 @@ def context_widget(
                 Δh=dh_val * u.hourangle,
                 Γ=gamma_val * u.nm,
                 monochromatic=mono,
-                name=ctx_name,
+                name=ctx.name,
             )
 
             # Save to session state
